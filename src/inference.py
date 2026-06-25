@@ -3,15 +3,43 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import time
+import json
 from typing import Any
+from functools import lru_cache
 
 from PIL import Image, ImageStat
 
 from .pixel_model import extract_features, load_model, model_exists
-from .preprocessing import basic_quality_flag
+from .preprocessing import basic_quality_flag, load_image
+
+from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
+import torch
+
+import gc
+
 
 WARNING = "Prototype pédagogique. Non destiné au diagnostic. Validation par un professionnel qualifié requise."
 
+@lru_cache(maxsize=1)
+def _load_vlm():
+    """ Load the MedGemma-4b-it model and processor from local files only, with 4-bit quantization to limit memory usage."""
+
+    model_id = "google/medgemma-4b-it"
+    processor = AutoProcessor.from_pretrained(model_id, local_files_only=True) # avoid downloading from Hugging Face Hub
+    quantization_config = BitsAndBytesConfig(load_in_4bit=True) # limit memory usage for the model MedGemma-4b-it
+    
+    # Load the model with device_map="cuda:0" to use GPU if available, and limit max_memory to 20GB
+    model = AutoModelForImageTextToText.from_pretrained(
+        model_id,
+        quantization_config=quantization_config,
+        device_map="cuda:0",
+        local_files_only=True,
+        max_memory={0: "20GB"}
+    )    
+    # check if the model is on GPU or CPU
+    print(f"Modèle chargé sur : {next(model.parameters()).device}")
+
+    return processor, model
 
 def _filename_signal(image_path: str | Path) -> str:
     name = Path(image_path).name.lower()
@@ -28,7 +56,6 @@ def _image_signal_strength(image_path: str | Path) -> float:
         image = Image.open(image_path).convert("L").resize((128, 128))
     except OSError:
         return 0.5
-
     stat = ImageStat.Stat(image)
     mean = stat.mean[0] / 255.0
     contrast = stat.stddev[0] / 128.0
@@ -46,10 +73,6 @@ def _confidence(signal: str, image_path: str | Path, mode: str) -> float:
 
 
 def toy_predict(image_path: str | Path, mode: str = "baseline") -> dict[str, Any]:
-    """Deterministic toy predictor used to validate the repo pipeline.
-
-    It reads synthetic labels from filenames. This is not medical inference.
-    """
     start = time.perf_counter()
     signal = _filename_signal(image_path)
     quality = basic_quality_flag(image_path)
@@ -58,19 +81,18 @@ def toy_predict(image_path: str | Path, mode: str = "baseline") -> dict[str, Any
         pred = "suspected_opacity"
         conf = _confidence(signal, image_path, mode)
         evidence = ["synthetic opacity-like area visible in the lung field"]
-        justification = "The synthetic image contains a localized brighter region compatible with the toy opacity class. This is a pipeline validation result, not a medical interpretation."
+        justification = "Pipeline validation result, not a medical interpretation."
     elif signal == "normal":
         pred = "normal"
         conf = _confidence(signal, image_path, mode)
         evidence = ["no synthetic opacity marker detected"]
-        justification = "The synthetic image does not contain the opacity marker used by the toy generator. This conclusion is limited to the synthetic validation setting."
+        justification = "The synthetic image does not contain the opacity marker."
     else:
         pred = "uncertain"
         conf = _confidence(signal, image_path, mode)
         evidence = ["limited synthetic image quality"]
-        justification = "The image is treated as limited quality in the toy catalog. The safe output is uncertainty rather than a forced class."
+        justification = "Safe fallback to uncertainty."
 
-    # Improved mode is more conservative.
     if mode == "improved" and quality != "good":
         pred = "uncertain"
         conf = min(conf, 0.55)
@@ -95,8 +117,7 @@ def pixel_baseline_predict(image_path: str | Path) -> dict[str, Any]:
     quality = basic_quality_flag(image_path)
 
     if not model_exists():
-        pred = "uncertain"
-        conf = 0.0
+        pred, conf = "uncertain", 0.0
         evidence = ["pixel baseline model not trained"]
         justification = "Run scripts/train_pixel_baseline.py before using the pixel baseline."
     else:
@@ -106,8 +127,7 @@ def pixel_baseline_predict(image_path: str | Path) -> dict[str, Any]:
         probabilities = model.predict_proba(features)[0]
         conf = float(max(probabilities))
         evidence = ["prediction based on image intensity, contrast, histogram and edge features"]
-        justification = "A lightweight logistic-regression baseline predicted from image pixels, not from the filename."
-
+        justification = "Lightweight logistic-regression baseline from image pixels."
         if conf < 0.6:
             pred = "uncertain"
 
@@ -126,9 +146,63 @@ def pixel_baseline_predict(image_path: str | Path) -> dict[str, Any]:
     }
 
 
-def vlm_predict_placeholder(image_path: str | Path, prompt: str) -> dict[str, Any]:
-    """Placeholder for a Hugging Face / MedGemma / Gemma 4 VLM call.
+def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline") -> dict[str, Any]:
+    start = time.perf_counter()
+    quality = basic_quality_flag(image_path)
+    # print(f"=== IMAGE QUALITY === {quality} for {image_path}")
+    image = load_image(image_path)
 
-    Students should keep the same output schema as toy_predict.
-    """
-    return toy_predict(image_path, mode="baseline")
+    # Lecture du prompt depuis le fichier
+    prompt_file = Path(__file__).resolve().parents[1] / "prompts" / f"{mode}_prompt.txt"
+    system_prompt = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else ""
+
+    processor, model = _load_vlm()
+
+    messages = [
+        {"role": "user", "content": [
+            {"type": "image", "image": image},
+            {"type": "text", "text": system_prompt}
+        ]}
+    ]
+
+    inputs = processor(
+        text=processor.apply_chat_template(messages, add_generation_prompt=True),
+        images=image,
+        return_tensors="pt"
+    )
+    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    outputs = model.generate(**inputs, max_new_tokens=300)
+    response = processor.decode(outputs[0], skip_special_tokens=True)
+
+    # to clear GPU memory after generation 
+    del inputs, outputs # Supprimer la référence à inputs et outputs pour libérer la mémoire
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    # print("=== RESPONSE BRUTE ===")
+    # print(response)
+    # print("=== FIN RESPONSE ===")
+
+    # Extraire la partie après "model" et nettoyer les balises markdown
+    response_after_model = response.split("model\n")[-1] if "model\n" in response else response
+    response_clean = re.sub(r'```json\s*|\s*```', '', response_after_model).strip()
+    match = re.search(r'\{.*\}', response_clean, re.DOTALL)
+
+    try:
+        parsed = json.loads(match.group()) if match else {}
+    except json.JSONDecodeError:
+        parsed = {}
+
+    latency_ms = int((time.perf_counter() - start) * 1000)
+    return {
+        "image_quality": quality,
+        "predicted_class": parsed.get("predicted_class", "uncertain"),
+        "confidence": float(parsed.get("confidence", 0.0)),
+        "visual_evidence": parsed.get("visual_evidence", []),
+        "justification": parsed.get("justification", ""),
+        "limitations": parsed.get("limitations", []),
+        "warning": WARNING,
+        "model_name": "medgemma-4b-it",
+        "prompt_version": f"{mode}_v1",
+        "latency_ms": latency_ms,
+    }
