@@ -442,6 +442,7 @@
     form.append('model', document.getElementById('model').value);
 
     const [result] = await Promise.all([
+      // send the file to the server and wait for the JSON response
       fetch('/predict', { method: 'POST', body: form }).then(r => r.json()),
       new Promise(r => setTimeout(r, 2800)),
     ]);

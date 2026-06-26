@@ -34,7 +34,7 @@ def _load_vlm():
         quantization_config=quantization_config,
         device_map="cuda:0",
         local_files_only=True,
-        max_memory={0: "20GB"}
+        max_memory={0: "4GB"}
     )    
     # check if the model is on GPU or CPU
     print(f"Modèle chargé sur : {next(model.parameters()).device}")

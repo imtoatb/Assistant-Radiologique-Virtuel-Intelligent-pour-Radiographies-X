@@ -6,10 +6,10 @@ ALLOWED_CLASSES = {"normal", "suspected_opacity", "uncertain"}
 REQUIRED_KEYS = {"image_quality", "predicted_class", "confidence", "visual_evidence", "justification", "limitations", "warning"}
 WARNING_TEXT = "Prototype pédagogique. Non destiné au diagnostic. Validation par un professionnel qualifié requise."
 
-
+# permet de valider la prédiction du modèle selon le schéma attendu (les trois classes et les éléments du json) et les valeurs autorisées
 def validate_prediction(pred: dict[str, Any]) -> tuple[bool, list[str]]:
     errors: list[str] = []
-    missing = REQUIRED_KEYS - set(pred)
+    missing = REQUIRED_KEYS - set(pred) # is a key missing from the prediction ?
     if missing:
         errors.append(f"missing keys: {sorted(missing)}")
     if pred.get("predicted_class") not in ALLOWED_CLASSES:
@@ -24,7 +24,7 @@ def validate_prediction(pred: dict[str, Any]) -> tuple[bool, list[str]]:
         errors.append("warning missing")
     return not errors, errors
 
-
+# permet d'appliquer les garde-fous de sécurité sur la prédiction du modèle
 def apply_safety_guardrails(pred: dict[str, Any]) -> dict[str, Any]:
     valid, errors = validate_prediction(pred)
     if not valid:

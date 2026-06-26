@@ -32,7 +32,6 @@ from src.guardrails import apply_safety_guardrails
 
 FOLDERS = {
     'normal_lung_probe': 'normal',
-    'lung_images': 'suspected_opacity',
     'abnormal_lung_images': 'suspected_opacity',
 }
 

@@ -32,28 +32,36 @@ def icon():
 def index():
     return FileResponse(_STATIC / "index.html")
 
-
+# Endpoint pour recevoir une image et renvoyer la prédiction du modèle
 @app.post("/predict")
 async def predict(
-    file: UploadFile = File(...),
-    model: str = Form("pixel_baseline"),):
-    suffix = Path(file.filename or "img.png").suffix or ".png"
-    data   = await file.read()
+    file: UploadFile = File(...), # le fichier image choisi par l'utilisateur
+    model: str = Form("pixel_baseline"),): # le modèle choisi par l'utilisateur (pixel_baseline, vlm, vlm_improved, toy)
+    suffix = Path(file.filename or "img.png").suffix or ".png" # le suffixe du fichier (extension) pour créer un fichier temporaire
+    data   = await file.read() # lit le contenu du fichier image envoyé par l'utilisateur
 
+    # Crée un fichier temporaire pour stocker l'image et le passer au modèle
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(data)
         tmp_path = Path(tmp.name)
 
     try:
-        if model == "pixel_baseline":
+        # appel le modèle pixel_baseline (modèle de référence)
+        if model == "pixel_baseline": 
             result = apply_safety_guardrails(pixel_baseline_predict(tmp_path))
 
-        elif model == "vlm": # call model MedGemma
+        # appel le modèle MedGemma avec le prompt de base (baseline)
+        elif model == "vlm": 
             result = apply_safety_guardrails(vlm_predict_placeholder(tmp_path, mode="baseline"))
-        elif model == "vlm_improved":
+        
+        # appel le modèle MedGemma avec le prompt amélioré (improved)
+        elif model == "vlm_improved": 
             result = apply_safety_guardrails(vlm_predict_placeholder(tmp_path, mode="improved"))
-        else:
+       
+        # appel le modèle de test toy_predict
+        else: 
             result = apply_safety_guardrails(toy_predict(tmp_path, mode=model))
+
     except Exception as e:
         result = {
             "predicted_class": "error",
@@ -64,7 +72,7 @@ async def predict(
             "warning": "Prediction failed. Check model setup.",
         }
     finally:
-        tmp_path.unlink(missing_ok=True)
+        tmp_path.unlink(missing_ok=True) # supprime le fichier temporaire après l'inférence
 
     return result
 
