@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from src.inference import pixel_baseline_predict, toy_predict
+from src.inference import pixel_baseline_predict, toy_predict, vlm_predict_placeholder
 from src.guardrails import apply_safety_guardrails
 
 app = FastAPI(title="RX Analyzer")
@@ -36,8 +36,7 @@ def index():
 @app.post("/predict")
 async def predict(
     file: UploadFile = File(...),
-    model: str = Form("pixel_baseline"),
-):
+    model: str = Form("pixel_baseline"),):
     suffix = Path(file.filename or "img.png").suffix or ".png"
     data   = await file.read()
 
@@ -48,6 +47,11 @@ async def predict(
     try:
         if model == "pixel_baseline":
             result = apply_safety_guardrails(pixel_baseline_predict(tmp_path))
+
+        elif model == "vlm": # call model MedGemma
+            result = apply_safety_guardrails(vlm_predict_placeholder(tmp_path, mode="baseline"))
+        elif model == "vlm_improved":
+            result = apply_safety_guardrails(vlm_predict_placeholder(tmp_path, mode="improved"))
         else:
             result = apply_safety_guardrails(toy_predict(tmp_path, mode=model))
     except Exception as e:
@@ -56,10 +60,11 @@ async def predict(
             "confidence": 0.0,
             "visual_evidence": ["prediction failed"],
             "justification": str(e),
-            "limitations": ["model error — retrain the model"],
+            "limitations": ["model error"],
             "warning": "Prediction failed. Check model setup.",
         }
     finally:
         tmp_path.unlink(missing_ok=True)
 
     return result
+
