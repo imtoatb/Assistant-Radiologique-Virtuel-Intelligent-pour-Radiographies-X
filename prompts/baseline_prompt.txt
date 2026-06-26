@@ -21,3 +21,4 @@ Rules:
 - Use "uncertain" when image quality is poor or evidence is weak.
 - Avoid definitive clinical diagnosis.
 - Keep the response concise.
+- Answer in french.

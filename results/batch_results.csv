@@ -5,10 +5,10 @@ NORMAL-LUNG_00282_normal_320.jpg,data\normal_lung_probe\NORMAL-LUNG_00282_normal
 NORMAL-LUNG_00251_normal_285.jpg,data\normal_lung_probe\NORMAL-LUNG_00251_normal_285.jpg,normal_lung_probe,normal,normal,0.728,normal,0.95,normal,0.8
 NORMAL-LUNG_00229_normal_262.jpg,data\normal_lung_probe\NORMAL-LUNG_00229_normal_262.jpg,normal_lung_probe,normal,normal,0.739,normal,0.95,normal,0.8
 ABNORMAL-LUNG_00143_suspected_opacity_152.jpg,data\lung_images\ABNORMAL-LUNG_00143_suspected_opacity_152.jpg,lung_images,suspected_opacity,suspected_opacity,0.704,normal,0.95,normal,0.8
-NORMAL-LUNG_00755_normal_374.jpg,data\lung_images\NORMAL-LUNG_00755_normal_374.jpg,lung_images,suspected_opacity,normal,0.731,normal,0.8,normal,0.8
+NORMAL-LUNG_00755_normal_374.jpg,data\lung_images\NORMAL-LUNG_00755_normal_374.jpg,lung_images,normal,normal,0.731,normal,0.8,normal,0.8
 ABNORMAL-LUNG_00105_suspected_opacity_112.jpg,data\lung_images\ABNORMAL-LUNG_00105_suspected_opacity_112.jpg,lung_images,suspected_opacity,suspected_opacity,0.717,suspected_opacity,0.3,normal,0.8
-NORMAL-LUNG_00693_normal_308.jpg,data\lung_images\NORMAL-LUNG_00693_normal_308.jpg,lung_images,suspected_opacity,normal,0.747,normal,0.95,normal,0.8
-NORMAL-LUNG_00759_normal_378.jpg,data\lung_images\NORMAL-LUNG_00759_normal_378.jpg,lung_images,suspected_opacity,normal,0.714,normal,0.95,normal,0.8
+NORMAL-LUNG_00693_normal_308.jpg,data\lung_images\NORMAL-LUNG_00693_normal_308.jpg,lung_images,normal,normal,0.747,normal,0.95,normal,0.8
+NORMAL-LUNG_00759_normal_378.jpg,data\lung_images\NORMAL-LUNG_00759_normal_378.jpg,lung_images,normal,normal,0.714,normal,0.95,normal,0.8
 ABNORMAL_LUNG_00280_suspected_opacity_293.jpg,data\abnormal_lung_images\ABNORMAL_LUNG_00280_suspected_opacity_293.jpg,abnormal_lung_images,suspected_opacity,suspected_opacity,0.72,normal,0.95,normal,0.8
 ABNORMAL_LUNG_00045_suspected_opacity_052.jpg,data\abnormal_lung_images\ABNORMAL_LUNG_00045_suspected_opacity_052.jpg,abnormal_lung_images,suspected_opacity,suspected_opacity,0.704,normal,0.95,normal,0.8
 ABNORMAL_LUNG_00303_suspected_opacity_322.jpg,data\abnormal_lung_images\ABNORMAL_LUNG_00303_suspected_opacity_322.jpg,abnormal_lung_images,suspected_opacity,suspected_opacity,0.701,normal,0.95,normal,0.8

@@ -20,3 +20,4 @@ Rules:
 - No diagnosis language.
 - If confidence < 0.60, predicted_class must be "uncertain".
 - If JSON cannot be guaranteed, return "uncertain".
+- Answer in french.
