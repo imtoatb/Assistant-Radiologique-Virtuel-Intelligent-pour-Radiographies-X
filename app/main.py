@@ -36,7 +36,8 @@ def index():
 @app.post("/predict")
 async def predict(
     file: UploadFile = File(...), # le fichier image choisi par l'utilisateur
-    model: str = Form("pixel_baseline"),): # le modèle choisi par l'utilisateur (pixel_baseline, vlm, vlm_improved, toy)
+    model: str = Form("pixel_baseline"), # le modèle choisi par l'utilisateur (pixel_baseline, vlm, vlm_improved, toy)
+    prompt_version: int = Form(0),): 
     suffix = Path(file.filename or "img.png").suffix or ".png" # le suffixe du fichier (extension) pour créer un fichier temporaire
     data   = await file.read() # lit le contenu du fichier image envoyé par l'utilisateur
 
@@ -51,13 +52,13 @@ async def predict(
             result = apply_safety_guardrails(pixel_baseline_predict(tmp_path))
 
         # appel le modèle MedGemma avec le prompt de base (baseline)
-        elif model == "vlm": 
-            result = apply_safety_guardrails(vlm_predict_placeholder(tmp_path, mode="baseline"))
-        
+        elif model == "vlm":
+            result = apply_safety_guardrails(vlm_predict_placeholder(tmp_path, mode="baseline", version=prompt_version))
+
         # appel le modèle MedGemma avec le prompt amélioré (improved)
-        elif model == "vlm_improved": 
-            result = apply_safety_guardrails(vlm_predict_placeholder(tmp_path, mode="improved"))
-       
+        elif model == "vlm_improved":
+            result = apply_safety_guardrails(vlm_predict_placeholder(tmp_path, mode="improved", version=prompt_version))
+               
         # appel le modèle de test toy_predict
         else: 
             result = apply_safety_guardrails(toy_predict(tmp_path, mode=model))

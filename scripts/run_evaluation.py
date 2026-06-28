@@ -12,7 +12,9 @@ sys.path.append(str(ROOT))
 from src.inference import toy_predict, vlm_predict_placeholder
 from src.guardrails import apply_safety_guardrails, validate_prediction
 from src.metrics import summarize_metrics
-from src.database import insert_evaluation, insert_run, init_db
+from src.database import insert_evaluation, insert_run, get_evaluations
+
+from src.database import insert_prompt
 
 import logging
 
@@ -34,12 +36,34 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader(); w.writerows(rows)
 
+# permet de calculer les métriques globales sur l'ensemble des évaluations stockées en base
+def compute_metrics(db_path):
+    rows = get_evaluations(db_path)
+    if not rows:
+        print("Aucune évaluation en base.")
+        return
+    summary = summarize_metrics([{
+        'label': r['ground_truth_label'],
+        'predicted_class': r['predicted_class'],
+        'confidence': 0,
+        'json_valid': True,
+        'warning': '',
+        'latency_ms': 0,
+        'guardrail_errors': ''
+    } for r in rows])
+    print(json.dumps(summary, indent=2))
+
 # permet d'exécuter le modèle sur un ensemble de cas et de stocker les résultats dans la base de données
-def run(mode: str, db_path: Path, cases_path: Path, max_cases: int | None = None) -> tuple[list[dict], dict]:
+def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=None):
     cases = read_cases(cases_path)
 
-    if max_cases is not None:
+    if case_id is not None:
+        cases = [c for c in cases if int(c['case_id']) == case_id]
+    elif max_cases is not None:
         cases = cases[:max_cases]
+
+    prompt_text = (ROOT / 'prompts' / f'{mode}_prompt_{prompt_version}.txt').read_text(encoding='utf-8')
+    prompt_id = insert_prompt(db_path, prompt_name=mode, prompt_version=f'v{prompt_version}', prompt_text=prompt_text)
 
     rows = []
     for case in cases:
@@ -48,56 +72,46 @@ def run(mode: str, db_path: Path, cases_path: Path, max_cases: int | None = None
         
         # on choisit la fonction de prédiction selon le mode : toy, baseline ou improved
         predict_fct = vlm_predict_placeholder if mode in ['baseline', 'improved'] else toy_predict
-        pred = apply_safety_guardrails(predict_fct(image_path, mode=mode))
-
-        valid, errors = validate_prediction(pred)
-        row = {
-            'case_id': case['case_id'],
-            'label': case['label'],
-            'predicted_class': pred['predicted_class'],
-            'confidence': pred['confidence'],
-            'json_valid': valid,
-            'warning': pred.get('warning', ''),
-            'latency_ms': pred.get('latency_ms', 0),
-            'guardrail_errors': ';'.join(errors),
-        }
-        rows.append(row)
-
+        pred = apply_safety_guardrails(predict_fct(image_path, mode=mode, version=prompt_version))
+    
         # récupère l'id du run inséré dans la table runs pour l'utiliser ensuite dans insert_evaluation
-        run_id = insert_run(db_path, int(case['case_id']), str(image_path), pred)        
+        run_id = insert_run(db_path, int(case['case_id']), str(image_path), pred, prompt_id=prompt_id)
         insert_evaluation(db_path, run_id, case['label'], pred['predicted_class'])
         logging.info(f"{case['case_id']} — {pred['predicted_class']} ({pred['confidence']:.2f}) latency={pred['latency_ms']}ms")
-
-    # calcule les métriques globales sur l'ensemble des cas
-    metrics = summarize_metrics(rows)
-    return rows, metrics
+        print(f"case_id={case['case_id']} | pred={pred['predicted_class']} | conf={pred['confidence']:.2f}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    # to choose the model
     parser.add_argument('--mode', choices=['toy', 'baseline', 'improved'], default='toy')
-    parser.add_argument('--out-dir', type=Path, default=ROOT / 'eval' / 'outputs')
-
-    # la database est stockée dans data/medical_ai_evidence.sqlite
     parser.add_argument('--db-path', type=Path, default=ROOT / 'data' / 'medical_ai_evidence.sqlite')
-
     parser.add_argument('--cases-path', type=Path, default=ROOT / 'data' / 'synthetic_cases.csv')
-
-    # permet de limiter le nombre de cas à traiter (optionel) 
+    
+    # to indicte a maximum number of case
     parser.add_argument('--max-cases', type=int, default=None)
 
+    # choose the version of the prompt
+    parser.add_argument('--prompt-version', type=int, default=0)
+
+    # choose the case id to run the evaluation on a specific case
+    parser.add_argument('--case-id', type=int, default=None)
+
+    # to compute metrics on the existing evaluations in the database
+    parser.add_argument('--compute-metrics', action='store_true')
+
     args = parser.parse_args()
-    out_dir = args.out_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
-    modes = ['baseline', 'improved'] if args.mode == 'toy' else [args.mode]
-    summary = []
-    for mode in modes:
-        rows, metrics = run(mode, args.db_path, args.cases_path, max_cases=args.max_cases)
-        write_csv(out_dir / f'{mode}_predictions.csv', rows)
-        (out_dir / f'{mode}_metrics.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
-        summary.append({'mode': mode, **metrics})
-    write_csv(out_dir / 'before_after_summary.csv', summary)
-    print(json.dumps(summary, indent=2))
+
+    if args.compute_metrics:
+        compute_metrics(args.db_path)
+    else:
+        modes = ['baseline', 'improved'] if args.mode == 'toy' else [args.mode]
+        for mode in modes:
+            run(mode, args.db_path, args.cases_path,
+                max_cases=args.max_cases,
+                prompt_version=args.prompt_version,
+                case_id=args.case_id)
+
 
 
 if __name__ == '__main__':

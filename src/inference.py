@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import time
+from turtle import mode
 import json
 from typing import Any
 from functools import lru_cache
@@ -107,7 +108,7 @@ def toy_predict(image_path: str | Path, mode: str = "baseline") -> dict[str, Any
         "limitations": ["synthetic toy image", "no clinical context", "not a validated medical model"],
         "warning": WARNING,
         "model_name": f"toy-rule-{mode}",
-        "prompt_version": f"{mode}_v1",
+        "prompt_version": f"{mode}_v{version}",
         "latency_ms": latency_ms,
     }
 
@@ -146,21 +147,25 @@ def pixel_baseline_predict(image_path: str | Path) -> dict[str, Any]:
     }
 
 
-def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline") -> dict[str, Any]:
+def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline", version: int = 0) -> dict[str, Any]:
     start = time.perf_counter()
     quality = basic_quality_flag(image_path)
     # print(f"=== IMAGE QUALITY === {quality} for {image_path}")
     image = load_image(image_path)
 
     # Lecture du prompt depuis le fichier
-    prompt_file = Path(__file__).resolve().parents[1] / "prompts" / f"{mode}_prompt.txt"
+    prompt_file = Path(__file__).resolve().parents[1] / "prompts" / f"{mode}_prompt_{version}.txt"
     system_prompt = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else ""
+
+    print("=== PROMPT ===")
+    print(system_prompt[:200])
+    print("=== FIN PROMPT ===")
 
     processor, model = _load_vlm()
 
     messages = [
         {"role": "user", "content": [
-            {"type": "image", "image": image},
+            {"type": "image"},
             {"type": "text", "text": system_prompt}
         ]}
     ]
@@ -179,9 +184,9 @@ def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline") -> d
     gc.collect()
     torch.cuda.empty_cache()
 
-    # print("=== RESPONSE BRUTE ===")
-    # print(response)
-    # print("=== FIN RESPONSE ===")
+    print("=== RESPONSE BRUTE ===")
+    print(response)
+    print("=== FIN RESPONSE ===")
 
     # Extraire la partie après "model" et nettoyer les balises markdown
     response_after_model = response.split("model\n")[-1] if "model\n" in response else response
@@ -203,6 +208,6 @@ def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline") -> d
         "limitations": parsed.get("limitations", []),
         "warning": WARNING,
         "model_name": "medgemma-4b-it",
-        "prompt_version": f"{mode}_v1",
+        "prompt_version": f"{mode}_v{version}",
         "latency_ms": latency_ms,
     }
