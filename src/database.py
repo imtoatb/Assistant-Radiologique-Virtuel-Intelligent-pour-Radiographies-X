@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "sql" / "schema.sql"
-DEFAULT_DB = Path(__file__).resolve().parents[1] / "data" / "medical_ai_evidence.sqlite"
+DEFAULT_DB = Path(__file__).resolve().parents[1] / "data" / "database.sqlite"
 
 # connecte à la base de données SQLite et retourne un objet Connection
 def connect(db_path: str | Path = DEFAULT_DB) -> sqlite3.Connection:
@@ -80,50 +80,69 @@ def insert_prompt( db_path: str | Path = DEFAULT_DB, prompt_name: str = "", prom
     return prompt_id
 
 
-def insert_run( db_path: str | Path, case_id: int, image_path: str, prediction: dict, prompt_id: int | None = None ) -> int:
-    """Insère une inférence du modèle dans la table runs
-    Retourne l'id du run (utilisé ensuite par insert_evaluation)
-    """
+def insert_run(db_path: str | Path, case_id: int, image_path: str, prediction: dict, prompt_id: int ) -> int:
+    """Insère ou met à jour le run correspondant au couple case_id / prompt_id."""
     init_db(db_path)
     conn = connect(db_path)
-    cursor = conn.execute(
-        """
-        INSERT INTO runs (case_id, prompt_id, image_path, model_name,
-                          prediction_json, predicted_class, confidence, latency_ms)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            case_id,
-            prompt_id,
-            image_path,
-            prediction.get("model_name"),
-            json.dumps(prediction, ensure_ascii=False),
-            prediction.get("predicted_class"),
-            float(prediction.get("confidence", 0.0)),
-            int(prediction.get("latency_ms", 0)),
-        ),
+
+    values = (
+        case_id,
+        prompt_id,
+        image_path,
+        prediction.get("model_name"),
+        json.dumps(prediction, ensure_ascii=False),
+        prediction.get("predicted_class"),
+        float(prediction.get("confidence", 0.0)),
+        int(prediction.get("latency_ms", 0)),
     )
-    run_id: int = cursor.lastrowid
+
+    conn.execute("""
+        INSERT INTO runs (
+            case_id, prompt_id, image_path, model_name,
+            prediction_json, predicted_class, confidence, latency_ms
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+
+        ON CONFLICT(case_id, prompt_id) DO UPDATE SET
+            image_path = excluded.image_path,
+            model_name = excluded.model_name,
+            prediction_json = excluded.prediction_json,
+            predicted_class = excluded.predicted_class,
+            confidence = excluded.confidence,
+            latency_ms = excluded.latency_ms,
+            created_at = CURRENT_TIMESTAMP
+    """, values)
+
+    run_id = conn.execute(
+        "SELECT id FROM runs WHERE case_id = ? AND prompt_id = ?",
+        (case_id, prompt_id)
+    ).fetchone()["id"]
+
     conn.commit()
     conn.close()
     return run_id
 
 
 def insert_evaluation(db_path: str | Path, run_id: int, ground_truth: str, predicted: str) -> None:
-    """Log si le modèle s'est trompé ou pas sur ce run """
-    init_db(db_path)
-    correct = 1 if predicted == ground_truth else 0
-    error_type: str | None = None
-    if not correct:
-        error_type = f"predicted_{predicted}_expected_{ground_truth}"
+    """Insère ou met à jour l'évaluation du run."""
+    correct = int(predicted == ground_truth)
+    error_type = None if correct else f"predicted_{predicted}_expected_{ground_truth}"
+
     conn = connect(db_path)
-    conn.execute(
-        """
-        INSERT INTO evaluations (run_id, ground_truth_label, correct, error_type)
+
+    conn.execute("""
+        INSERT INTO evaluations (
+            run_id, ground_truth_label, correct, error_type
+        )
         VALUES (?, ?, ?, ?)
-        """,
-        (run_id, ground_truth, correct, error_type),
-    )
+
+        ON CONFLICT(run_id) DO UPDATE SET
+            ground_truth_label = excluded.ground_truth_label,
+            correct = excluded.correct,
+            error_type = excluded.error_type,
+            created_at = CURRENT_TIMESTAMP
+    """, (run_id, ground_truth, correct, error_type))
+
     conn.commit()
     conn.close()
 
@@ -134,21 +153,6 @@ def get_runs(db_path: str | Path = DEFAULT_DB) -> list[dict]:
     """Retourne tous les runs loggés, du plus récent au plus ancien """
     conn = connect(db_path)
     rows = conn.execute("SELECT * FROM runs ORDER BY created_at DESC").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def get_evaluations(db_path: str | Path = DEFAULT_DB) -> list[dict]:
-    """Retourne toutes les évaluations avec les infos du run associé """
-    conn = connect(db_path)
-    rows = conn.execute(
-        """
-        SELECT e.*, r.predicted_class, r.case_id, r.model_name
-        FROM evaluations e
-        JOIN runs r ON e.run_id = r.id
-        ORDER BY e.created_at DESC
-        """
-    ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -166,3 +170,28 @@ def get_prompts(db_path: str | Path = DEFAULT_DB) -> list[dict]:
     rows = conn.execute("SELECT * FROM prompts ORDER BY created_at DESC").fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+def get_evaluations(db_path: str | Path = DEFAULT_DB) -> list[dict]:
+    """Retourne les évaluations avec les informations des runs et des prompts."""
+    conn = connect(db_path)
+
+    rows = conn.execute("""
+        SELECT
+            r.case_id,
+            r.id AS run_id,
+            e.id AS evaluation_id,
+            p.id AS prompt_id,
+            p.prompt_name,
+            p.prompt_version,
+            e.ground_truth_label,
+            r.predicted_class,
+            r.confidence,
+            r.latency_ms AS latency
+        FROM runs r
+        JOIN evaluations e ON e.run_id = r.id
+        JOIN prompts p ON p.id = r.prompt_id
+        ORDER BY p.prompt_name, p.prompt_version, r.case_id
+    """).fetchall()
+
+    conn.close()
+    return [dict(row) for row in rows]

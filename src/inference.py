@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import time
-from turtle import mode
 import json
 from typing import Any
 from functools import lru_cache
@@ -36,7 +35,7 @@ def _load_vlm():
         device_map="cuda:0",
         local_files_only=True,
         max_memory={0: "4GB"}
-    )    
+    )
     # check if the model is on GPU or CPU
     print(f"Modèle chargé sur : {next(model.parameters()).device}")
 
@@ -73,7 +72,7 @@ def _confidence(signal: str, image_path: str | Path, mode: str) -> float:
     return 0.45 + (0.12 * strength)
 
 
-def toy_predict(image_path: str | Path, mode: str = "baseline") -> dict[str, Any]:
+def toy_predict(image_path: str | Path, mode: str = "baseline", version: int = 0) -> dict[str, Any]:
     start = time.perf_counter()
     signal = _filename_signal(image_path)
     quality = basic_quality_flag(image_path)
@@ -182,6 +181,7 @@ def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline", vers
     # to clear GPU memory after generation 
     del inputs, outputs # Supprimer la référence à inputs et outputs pour libérer la mémoire
     gc.collect()
+    time.sleep(20)
     torch.cuda.empty_cache()
 
     print("=== RESPONSE BRUTE ===")

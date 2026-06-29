@@ -45,7 +45,7 @@ def test_repository_student_contract_is_present() -> None:
         "docs/expert_review_integration.md",
         "docs/github_push_instructions.md",
         "eval/outputs",
-        "medical_ai_evidence.sqlite",
+        "database.sqlite",
         "assets/assistant_radiologue_v3_notes_professeur_fr.pptx",
         "assets/notes_orales_assistant_radiologue_v3_style_professeur_fr.md",
     ]
@@ -136,7 +136,7 @@ def test_api_predict_preserves_uploaded_case_signal() -> None:
 
 
 def test_evaluation_command_runs_and_preserves_warning_contract(tmp_path: Path) -> None:
-    db_path = tmp_path / "medical_ai_evidence.sqlite"
+    db_path = tmp_path / "database.sqlite"
     out_dir = tmp_path / "outputs"
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT)

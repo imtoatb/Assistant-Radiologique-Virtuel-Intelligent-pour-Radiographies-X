@@ -18,7 +18,7 @@ sys.path.append(str(ROOT))
 
 from src.database import init_db, seed_cases, insert_prompt
 
-DB_PATH = ROOT / 'data' / 'medical_ai_evidence.sqlite'
+DB_PATH = ROOT / 'data' / 'database.sqlite'
 CASES_CSV = ROOT / 'data' / 'cases.csv'
 PROMPTS_DIR = ROOT / 'prompts'
 
