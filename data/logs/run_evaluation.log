@@ -236,3 +236,7 @@
 2026-06-29 08:54:25,870 INFO 19 — normal (0.80) latency=40502ms
 2026-06-29 08:55:09,769 INFO 620 — normal (0.80) latency=43880ms
 2026-06-29 08:55:44,682 INFO 622 — normal (0.80) latency=34896ms
+2026-06-29 10:41:58,937 INFO 18 — suspected_opacity (0.75) latency=62959ms
+2026-06-29 10:42:56,800 INFO 19 — suspected_opacity (0.75) latency=57847ms
+2026-06-29 10:43:50,048 INFO 620 — normal (0.85) latency=53230ms
+2026-06-29 10:44:42,021 INFO 622 — normal (0.85) latency=51957ms
