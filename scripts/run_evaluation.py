@@ -66,13 +66,18 @@ def compute_metrics(db_path):
 # permet d'exécuter le modèle sur un ensemble de cas et de stocker les résultats dans la base de données
 # mode : 'toy' pour la fausse IA de test, 'baseline' ou 'improved' pour MedGemma
 # prompt_version : 0 pour baseline, 1/2/3... pour les versions du prompt improved
-def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=None, sample_n=None, sample_seed=42):
+def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=None, case_ids=None, sample_n=None, sample_seed=42):
     cases = read_cases(cases_path)
-    if case_id is not None:
-        cases = [c for c in cases if int(c['case_id']) == case_id]
+
+    if case_ids is not None:
+        cases = [c for c in cases if int(c['case_id']) in case_ids] # liste de cas
+
+    elif case_id is not None:
+        cases = [c for c in cases if int(c['case_id']) == case_id] 
+
     elif sample_n is not None:
-        # échantillon aléatoire équilibré — même seed pour comparer baseline vs improved sur les mêmes images
         cases = balanced_sample(cases, n=sample_n, seed=sample_seed)
+
     elif max_cases is not None:
         cases = cases[:max_cases]
 
@@ -82,7 +87,8 @@ def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=Non
     prompt_text = prompt_path.read_text(encoding="utf-8")
     prompt_id = insert_prompt(db_path, prompt_name=prompt_name, prompt_version=f"v{prompt_version}", prompt_text=prompt_text)
 
-    for case in cases:
+    for i, case in enumerate(cases, 1):
+        print(f"[{i}/{len(cases)}]", "**"*100)
         image_path = ROOT / case['image_path']
 
         # fausse IA basée sur le nom de fichier, utilisée uniquement pour tester le pipeline
@@ -111,18 +117,27 @@ def main() -> None:
     parser.add_argument('--mode', choices=['toy', 'baseline', 'improved', 'full'], default='toy')
     parser.add_argument('--db-path', type=Path, default=ROOT / 'data' / 'database.sqlite')
     parser.add_argument('--cases-path', type=Path, default=ROOT / 'data' / 'cases.csv')
+
     # limiter le nombre de cas à traiter (optionnel, ignoré si --sample-n est utilisé)
     parser.add_argument('--max-cases', type=int, default=None)
+
     # version du prompt : 0 pour baseline, 1/2/3... pour les versions du prompt improved
     parser.add_argument('--prompt-version', type=int, default=0)
+
     # choisir un cas spécifique avec son ID (optionnel)
     parser.add_argument('--case-id', type=int, default=None)
+
     # échantillon aléatoire équilibré de N images (par défaut 100)
     parser.add_argument('--sample-n', type=int, default=None)
-    # seed pour reproduire le même échantillon (par défaut 42)
+
+    # seed pour reproduire le même échantillon
     parser.add_argument('--sample-seed', type=int, default=42)
+
     # calculer les métriques sur l'ensemble des évaluations stockées en base
     parser.add_argument('--compute-metrics', action='store_true')
+
+    # choisir une liste de cas
+    parser.add_argument('--case-ids', type=int, nargs='+', default=None)
 
     args = parser.parse_args()
 
@@ -132,7 +147,17 @@ def main() -> None:
     elif args.mode == 'full':
         run_full_evaluation(args.db_path, args.cases_path, improved_version=args.prompt_version, sample_n=args.sample_n or 100, sample_seed=args.sample_seed)
     else:
-        run(args.mode, args.db_path, args.cases_path, max_cases=args.max_cases, prompt_version=args.prompt_version, case_id=args.case_id, sample_n=args.sample_n, sample_seed=args.sample_seed)
+        run(
+            args.mode,
+            args.db_path,
+            args.cases_path,
+            max_cases=args.max_cases, # limite le nombre de cas (optionnel)
+            prompt_version=args.prompt_version, # version du prompt (0=baseline, 1/2/3=improved)
+            case_id=args.case_id, # un seul cas par son ID (optionnel)
+            case_ids=args.case_ids, # liste de cas par leurs IDs (optionnel)
+            sample_n=args.sample_n, # échantillon aléatoire équilibré de N images
+            sample_seed=args.sample_seed # seed pour reproduire le même échantillon
+            )
 
 if __name__ == '__main__':
     main()
