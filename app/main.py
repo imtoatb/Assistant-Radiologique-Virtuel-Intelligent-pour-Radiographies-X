@@ -96,7 +96,7 @@ def index():
 async def predict(
     file: UploadFile = File(...),
     model: str = Form("pixel_baseline"),
-    prompt_version: int = Form(0),
+    prompt_version: int = Form(4),
 ):
     suffix = Path(file.filename or "img.png").suffix or ".png"
     data   = await file.read()
