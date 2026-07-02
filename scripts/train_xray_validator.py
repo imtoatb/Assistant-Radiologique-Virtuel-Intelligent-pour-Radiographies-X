@@ -1,49 +1,23 @@
-"""
-train_xray_validator.py
-=======================
-Entraîne un classifier léger (logistic regression) pour distinguer
-une radiographie thoracique d'une image quelconque.
-
-Ce classifier est utilisé en niveau 2 dans image_validator.py,
-uniquement quand les heuristiques sont inconcluses (score entre 0.3 et 0.7).
-
-Données d'entraînement attendues :
-    data/validator_training/xray/       → images de radios thoraciques
-    data/validator_training/not_xray/   → images quelconques (photos, screenshots…)
-
-Si vous n'avez pas de données not_xray, utilisez --auto-negative pour générer
-des images synthétiques colorées (photos simulées) comme exemples négatifs.
-
-Usage :
-    python scripts/train_xray_validator.py
-    python scripts/train_xray_validator.py --auto-negative --max-positives 200
-    python scripts/train_xray_validator.py --evaluate   # affiche les métriques
-
-Le modèle est sauvegardé dans models/xray_validator.joblib
-"""
-
 from __future__ import annotations
 
 import argparse
 import random
 import sys
 from pathlib import Path
-
+from typing import Any
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-# ── Constantes ───────────────────────────────────────────────────────────────
-
+#Constantes
 XRAY_DIR      = ROOT / "data" / "validator_training" / "xray"
 NOT_XRAY_DIR  = ROOT / "data" / "validator_training" / "not_xray"
 MODEL_PATH    = ROOT / "models" / "xray_validator.joblib"
 ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp"}
 
 
-# ── Import des features depuis image_validator ───────────────────────────────
-
+#Import des features depuis image_validator
 from src.image_validator import _extract_validator_features
 from PIL import Image
 
@@ -72,12 +46,6 @@ def load_examples(directory: Path, label: str, max_n: int | None = None) -> tupl
 def generate_synthetic_negatives(n: int = 100) -> tuple[list, list]:
     """
     Génère des images synthétiques colorées comme exemples négatifs.
-
-    Ces images ont des propriétés opposées aux radios :
-    - Couleurs vives (fort écart inter-canaux)
-    - Textures variées
-    - Luminosité élevée
-    Utilisé quand on n'a pas de vraies images non-radio.
     """
     from PIL import ImageDraw
     import math
@@ -116,18 +84,17 @@ def train(X: np.ndarray, y: list[str]) -> Any:
 
     model = Pipeline([
         ("scaler", StandardScaler()),
-        ("clf", LogisticRegression(max_iter=1000, C=1.0, random_state=42)),
+        ("clf", LogisticRegression(max_iter = 1000, C = 1.0, random_state = 42)),
     ])
     model.fit(X, y)
     return model
 
 
 def evaluate(model: Any, X: np.ndarray, y: list[str]) -> None:
-    """Affiche les métriques d'évaluation."""
     from sklearn.metrics import classification_report, confusion_matrix
 
     y_pred = model.predict(X)
-    print("\n=== Métriques d'évaluation ===")
+
     print(classification_report(y, y_pred))
     print("Matrice de confusion :")
     print(confusion_matrix(y, y_pred, labels=["xray", "not_xray"]))
@@ -145,9 +112,8 @@ def main() -> None:
                         help="Nombre d'images synthétiques à générer (--auto-negative)")
     args = parser.parse_args()
 
-    print("=== Entraînement du validator xray ===\n")
 
-    # ── Exemples positifs (radios) ───────────────────────────────────────────
+    #Exemples positifs (radios)
     if not XRAY_DIR.exists() or not any(XRAY_DIR.iterdir()):
         # Utiliser les images du dataset principal comme exemples positifs
         fallback_dirs = [
@@ -171,7 +137,7 @@ def main() -> None:
         print("Aucun exemple positif trouvé. Vérifiez le dossier.")
         sys.exit(1)
 
-    # ── Exemples négatifs ────────────────────────────────────────────────────
+    #Exemples négatifs
     if NOT_XRAY_DIR.exists() and any(NOT_XRAY_DIR.iterdir()):
         print(f"Chargement des exemples négatifs depuis {NOT_XRAY_DIR}...")
         X_neg, y_neg = load_examples(NOT_XRAY_DIR, "not_xray")
@@ -185,24 +151,23 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # ── Entraînement ─────────────────────────────────────────────────────────
+    #Entraînement
     X = np.array(X_pos + X_neg)
     y = y_pos + y_neg
 
     print(f"\nEntraînement sur {len(X)} exemples ({len(X_pos)} radios / {len(X_neg)} non-radios)...")
     model = train(X, y)
 
-    # ── Sauvegarde ───────────────────────────────────────────────────────────
+    #Sauvegarde
     import joblib
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, MODEL_PATH)
     print(f"Modèle sauvegardé → {MODEL_PATH}")
 
-    # ── Évaluation (optionnel) ───────────────────────────────────────────────
+    #Évaluation
     if args.evaluate:
         evaluate(model, X, y)
         print("\nNote : ces métriques sont sur les données d'entraînement (pas de test set séparé).")
-        print("Pour une évaluation réelle, séparez vos données en train/test avant de lancer ce script.")
 
 
 if __name__ == "__main__":

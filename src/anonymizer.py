@@ -1,31 +1,3 @@
-"""
-anonymizer.py
-=============
-Anonymisation des images entrantes avant tout traitement.
-
-Ce module supprime toutes les métadonnées embarquées dans l'image
-(EXIF, IPTC, XMP, commentaires) qui pourraient contenir des informations
-patient (nom, date de naissance, établissement, numéro de sécurité sociale…).
-
-Même si les images sont en JPEG/PNG et non en DICOM, les appareils modernes
-et certains logiciels PACS exportent des métadonnées dans les fichiers JPEG.
-
-IMPORTANT : Ce module ne modifie pas le fichier original.
-Il retourne une image PIL propre et/ou sauvegarde une copie anonymisée.
-
-Usage :
-    from src.anonymizer import anonymize_image, anonymize_to_path
-
-    # Retourne une PIL.Image sans métadonnées
-    clean_image = anonymize_image("path/to/image.jpg")
-
-    # Sauvegarde une copie anonymisée sur disque
-    anonymize_to_path("path/to/image.jpg", "path/to/clean_image.jpg")
-
-    # Vérifie si une image contient des métadonnées sensibles
-    report = audit_metadata("path/to/image.jpg")
-"""
-
 from __future__ import annotations
 
 import io
@@ -61,21 +33,19 @@ _SENSITIVE_EXIF_TAGS = {
 def anonymize_image(path: str | Path) -> Image.Image:
     """
     Charge une image et retourne une copie PIL sans aucune métadonnée.
-
     La technique consiste à re-encoder l'image en mémoire via PIL,
     ce qui supprime tous les chunks de métadonnées (EXIF, IPTC, XMP,
     commentaires PNG, chunks tEXt…).
 
-    L'image elle-même (pixels) n'est pas modifiée.
     """
     path = Path(path)
     original = Image.open(path)
 
-    # Conserver le mode original (L pour gris, RGB, RGBA…)
+    #Conserver le mode original (L pour gris, RGB, RGBA…)
     mode = original.mode
 
-    # Re-créer l'image depuis les données pixel brutes uniquement
-    # getdata() retourne les valeurs de pixels sans aucune métadonnée
+    #Re-créer l'image depuis les données pixel brutes uniquement
+    #getdata() retourne les valeurs de pixels sans aucune métadonnée
     clean = Image.new(mode, original.size)
     clean.putdata(list(original.getdata()))
 
@@ -87,14 +57,6 @@ def anonymize_to_path(
     destination: str | Path | None = None,
     quality: int = 95,
 ) -> Path:
-    """
-    Sauvegarde une copie anonymisée de l'image sur disque.
-
-    Si destination n'est pas fourni, sauvegarde dans le même dossier
-    avec le suffixe _anon avant l'extension.
-
-    Retourne le chemin de destination.
-    """
     source = Path(source)
 
     if destination is None:
@@ -116,17 +78,12 @@ def anonymize_to_path(
 
 def audit_metadata(path: str | Path) -> dict[str, Any]:
     """
-    Analyse les métadonnées présentes dans l'image et retourne un rapport.
-
-    Utile pour vérifier avant/après anonymisation, et pour le rapport
-    de conformité du prototype.
-
     Retourne :
-        has_sensitive_metadata (bool)  : True si des métadonnées sensibles ont été trouvées
-        found_tags (list[str])         : noms des tags détectés
-        exif_count (int)               : nombre total de champs EXIF présents
-        has_png_text (bool)            : True si des chunks texte PNG sont présents
-        summary (str)                  : résumé lisible
+    has_sensitive_metadata (bool): True si des métadonnées sensibles ont été trouvées
+    found_tags (list[str]): noms des tags détectés
+    exif_count (int): nombre total de champs EXIF présents
+    has_png_text (bool) : True si des chunks texte PNG sont présents
+    summary (str) : résumé lisible
     """
     path = Path(path)
     image = Image.open(path)
@@ -135,9 +92,9 @@ def audit_metadata(path: str | Path) -> dict[str, Any]:
     exif_count = 0
     has_png_text = False
 
-    # ── EXIF (JPEG principalement) ──────────────────────────────────────────
+    
     try:
-        exif_data = image._getexif()  # type: ignore[attr-defined]
+        exif_data = image._getexif()                                # type: ignore[attr-defined]
         if exif_data:
             exif_count = len(exif_data)
             for tag_id, value in exif_data.items():
@@ -148,7 +105,7 @@ def audit_metadata(path: str | Path) -> dict[str, Any]:
     except (AttributeError, Exception):
         pass
 
-    # ── Métadonnées PNG (chunks tEXt, zTXt, iTXt) ─────────────────────────
+    #Métadonnées PNG (chunks tEXt, zTXt, iTXt)
     try:
         info = image.info or {}
         text_keys = [k for k in info if isinstance(info[k], str) and info[k].strip()]
@@ -162,9 +119,9 @@ def audit_metadata(path: str | Path) -> dict[str, Any]:
     has_sensitive = bool(found_tags) or exif_count > 5
 
     if not found_tags and exif_count == 0:
-        summary = "Aucune métadonnée détectée."
+        summary = "Aucune métadonnée"
     elif found_tags:
-        summary = f"{len(found_tags)} champ(s) potentiellement sensible(s) détecté(s) : {', '.join(t.split('=')[0] for t in found_tags)}"
+        summary = f"{len(found_tags)} champs potentiellement détectés : {', '.join(t.split('=')[0] for t in found_tags)}"
     else:
         summary = f"{exif_count} champs EXIF présents (aucun identifié comme sensible)."
 

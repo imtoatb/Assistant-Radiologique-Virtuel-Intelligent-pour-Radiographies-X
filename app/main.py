@@ -46,7 +46,7 @@ async def predict(
         tmp.write(data)
         tmp_path = Path(tmp.name)
 
-    # ── Validation : est-ce bien une radio ? ────────────────────────────────
+    #Validation
     validation = validate_image(tmp_path)
     if not validation["is_xray"]:
         tmp_path.unlink(missing_ok=True)
@@ -60,7 +60,7 @@ async def predict(
             "is_xray": False,
         }
 
-    # ── Anonymisation : suppression des métadonnées ──────────────────────────
+    #suppression des métadonnées
     clean_path = anonymize_to_path(tmp_path)
     tmp_path.unlink(missing_ok=True)
 
