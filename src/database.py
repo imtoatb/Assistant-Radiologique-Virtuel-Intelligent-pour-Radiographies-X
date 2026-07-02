@@ -54,6 +54,25 @@ def seed_cases( db_path: str | Path = DEFAULT_DB, csv_path: str | Path = DEFAULT
     return inserted
 
 
+def insert_case(db_path: str | Path = DEFAULT_DB, image_path: str = "", source: str = "upload", ground_truth_label: str | None = None, split: str = "upload", notes: str = "") -> int:
+    """Insère une nouvelle radiographie (ex: upload utilisateur) dans la table cases
+    Retourne l'id de la case créée (utilisé ensuite par insert_run)
+    """
+    init_db(db_path)
+    conn = connect(db_path)
+    cursor = conn.execute(
+        """
+        INSERT INTO cases (image_path, source, ground_truth_label, split, notes)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (image_path, source, ground_truth_label, split, notes),
+    )
+    case_id: int = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return case_id
+
+
 def insert_prompt( db_path: str | Path = DEFAULT_DB, prompt_name: str = "", prompt_version: str = "", prompt_text: str = "") -> int:
     """Insère un prompt dans la table prompts si il n'existe pas déjà
     Retourne l'id du prompt (utilisé ensuite par insert_run)

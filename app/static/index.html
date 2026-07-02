@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RX Analyzer</title>
+  <title>Pulmonar</title>
   <link rel="icon" href="/icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
@@ -115,6 +115,154 @@
       transform: translateY(-1px);
     }
     .btn-primary:disabled { opacity: 0.7; cursor: default; transform: none; }
+
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: transparent; color: #64748b;
+      border: 1px solid #e2e8f0; border-radius: 999px;
+      padding: 9px 18px;
+      font-size: 0.875rem; font-weight: 600; font-family: 'Inter', sans-serif;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+    .btn-ghost:hover { background: #f1f5f9; border-color: #cbd5e1; color: #1e293b; }
+    .btn-ghost svg { flex-shrink: 0; }
+
+    /* ── History modal ───────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(6,9,15,0.5);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; padding: 2rem;
+    }
+    .modal-panel {
+      background: #fff; border-radius: 16px;
+      width: 100%; max-width: 640px; max-height: 80vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.2rem 1.4rem; border-bottom: 1px solid #e8ecf0;
+    }
+    .modal-title { font-size: 1rem; font-weight: 700; color: #0f172a; }
+    .modal-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; color: #94a3b8; line-height: 1; padding: 4px;
+    }
+    .modal-close:hover { color: #1e293b; }
+    .modal-body { overflow-y: auto; padding: 0.6rem; }
+
+    .modal-filters {
+      padding: 0.9rem 1.4rem; border-bottom: 1px solid #e8ecf0;
+    }
+
+    /* ── Date range picker ───────────────────────────────────── */
+    .date-picker { position: relative; display: inline-block; }
+    .date-trigger {
+      display: flex; align-items: center; gap: 8px;
+      border: 1px solid #e2e8f0; border-radius: 999px;
+      background: #fff; color: #475569;
+      font-size: 0.82rem; font-weight: 600; font-family: 'Inter', sans-serif;
+      padding: 7px 14px; cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s, color 0.2s;
+    }
+    .date-trigger:hover { border-color: #cbd5e1; }
+    .date-trigger.active { border-color: #76a8f9; box-shadow: 0 0 0 3px rgba(118,168,249,0.18); }
+    .date-trigger svg { color: #94a3b8; flex-shrink: 0; }
+
+    .date-popover {
+      position: absolute; top: calc(100% + 8px); left: 0;
+      background: #fff; border: 1px solid #e8ecf0; border-radius: 14px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.16);
+      padding: 14px; z-index: 50; width: 272px;
+    }
+    .date-popover-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .date-month-label { font-size: 0.83rem; font-weight: 700; color: #0f172a; text-transform: capitalize; }
+    .date-nav {
+      background: none; border: 1px solid #e2e8f0; border-radius: 8px;
+      width: 26px; height: 26px; cursor: pointer; color: #64748b;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .date-nav:hover { background: #f1f5f9; }
+
+    .date-weekdays, .date-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr);
+    }
+    .date-weekdays span {
+      font-size: 0.63rem; font-weight: 700; color: #94a3b8;
+      text-align: center; text-transform: uppercase; padding-bottom: 6px;
+    }
+    .date-cell { position: relative; height: 34px; }
+    .date-cell button {
+      display: flex; align-items: center; justify-content: center;
+      box-sizing: border-box;
+      width: 30px; height: 30px; min-width: 30px; min-height: 30px; max-width: 30px; max-height: 30px;
+      margin: 2px auto 0; padding: 0; flex: none;
+      border: none; outline: none; background: none; appearance: none; -webkit-appearance: none;
+      cursor: pointer; font-size: 0.78rem; line-height: 1; color: #1e293b; font-family: 'Inter', sans-serif;
+      border-radius: 50%; position: relative; z-index: 2;
+      transition: background 0.15s, color 0.15s;
+    }
+    .date-cell button:hover { background: #eef4fe; }
+    .date-cell.selected button { background: #76a8f9; color: #fff; }
+    .date-cell.selected button:hover { background: #5b92f7; }
+    .date-cell.today:not(.selected) button { box-shadow: inset 0 0 0 1px #cbd5e1; }
+
+    /* Band height/offset match the circle exactly (30px, 2px top offset). */
+    .date-cell.in-range::before {
+      content: ''; position: absolute; top: 2px; height: 30px; left: 0; right: 0;
+      background: #eef4fe; z-index: 1;
+    }
+    /* Start/end cells: band stops a few px past the circle's center (not at the
+       far edge) — enough overlap to blend under the circle without poking out
+       the other side, where the range doesn't continue. */
+    .date-cell.range-start::before {
+      content: ''; position: absolute; top: 2px; height: 30px;
+      left: calc(50% - 4px); right: 0;
+      background: #eef4fe; z-index: 1;
+    }
+    .date-cell.range-end::before {
+      content: ''; position: absolute; top: 2px; height: 30px;
+      left: 0; right: calc(50% - 4px);
+      background: #eef4fe; z-index: 1;
+    }
+
+    .date-popover-footer {
+      display: flex; justify-content: flex-end;
+      margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9;
+    }
+    .filter-clear {
+      background: none; border: none; cursor: pointer;
+      font-size: 0.78rem; font-weight: 600; color: #76a8f9;
+      padding: 6px 4px;
+    }
+    .filter-clear:hover { color: #5b92f7; }
+
+    .history-empty {
+      padding: 2.4rem 1rem; text-align: center;
+      color: #94a3b8; font-size: 0.85rem;
+    }
+
+    .history-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border-radius: 10px;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .history-item:hover { background: #f1f5f9; }
+    .history-meta { flex: 1; min-width: 0; }
+    .history-top {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.85rem; font-weight: 600; color: #1e293b;
+    }
+    .history-sub {
+      font-size: 0.75rem; color: #94a3b8; margin-top: 2px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .history-conf { font-size: 0.8rem; font-weight: 600; color: #64748b; flex-shrink: 0; }
 
     /* ── Main grid ───────────────────────────────────────────── */
     .main {
@@ -308,31 +456,35 @@
       <div class="brand-icon">
         <img src="/icon.png" alt="" onerror="this.outerHTML='<svg width=\'17\' height=\'17\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'white\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><rect x=\'3\' y=\'3\' width=\'18\' height=\'18\' rx=\'3\'/><path d=\'M3 9h18M9 21V9\'/></svg>'">
       </div>
-      <span class="brand-name">RX Analyzer</span>
+      <span class="brand-name">Pulmonar</span>
     </div>
 
     <div class="vsep"></div>
 
     <div class="tb-field">
-      <span class="tb-label">Model</span>
+      <span class="tb-label">Modèle</span>
       <select id="model">
         <option value="pixel_baseline">Pixel Baseline</option>
-        <option value="baseline">Baseline (toy)</option>
-        <option value="improved">Improved (toy)</option>
+        <option value="baseline">Référence (jouet)</option>
+        <option value="improved">Amélioré (jouet)</option>
         <option value="vlm">MedGemma </option>
-        <option value="vlm_improved">MedGemma Improved</option>
+        <option value="vlm_improved">MedGemma Amélioré</option>
       </select>
     </div>
 
     <label class="toggle-wrap">
       <input type="checkbox" id="raw-toggle">
       <div class="toggle-track"><div class="toggle-thumb"></div></div>
-      <span class="toggle-label">Raw output</span>
+      <span class="toggle-label">Sortie brute</span>
     </label>
 
     <div class="spacer"></div>
 
-    <button class="btn-primary" id="action-btn">✦&nbsp; Select a file</button>
+    <button class="btn-ghost" id="history-btn">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 3"/></svg>
+      <span>Historique</span>
+    </button>
+    <button class="btn-primary" id="action-btn">✦&nbsp; Sélectionner un fichier</button>
     <input type="file" id="file-input" accept=".png,.jpg,.jpeg" style="display:none">
   </div>
 
@@ -343,18 +495,18 @@
     <div class="col-left">
       <div id="drop-zone">
         <div class="dz-icon">🩻</div>
-        <p class="dz-title">Drop a chest X-ray here</p>
+        <p class="dz-title">Déposez une radio thoracique ici</p>
         <p class="dz-sub">PNG · JPG · JPEG</p>
-        <button class="dz-btn" id="dz-browse">Browse files</button>
+        <button class="dz-btn" id="dz-browse">Parcourir les fichiers</button>
       </div>
 
       <div id="image-panel" class="img-container hidden">
-        <img id="xray-img" src="" alt="X-ray">
+        <img id="xray-img" src="" alt="Radio">
         <div class="scan-line hidden" id="scan-line"></div>
-        <div class="preview-hint hidden" id="preview-hint">Press Launch Scanner to analyze</div>
+        <div class="preview-hint hidden" id="preview-hint">Appuyez sur Lancer le scanner pour analyser</div>
         <div class="img-overlay hidden" id="img-overlay">
           <div class="overlay-icon">↺</div>
-          <span class="overlay-label">Change image</span>
+          <span class="overlay-label">Changer l'image</span>
         </div>
       </div>
     </div>
@@ -363,25 +515,61 @@
     <div class="col-right">
       <div class="panel" id="right-idle">
         <div class="panel-icon">🫁</div>
-        <p class="panel-title">No image loaded</p>
-        <p class="panel-sub">Drop a chest X-ray on the left<br>to get started.</p>
+        <p class="panel-title">Aucune image chargée</p>
+        <p class="panel-sub">Déposez une radio thoracique à gauche<br>pour commencer.</p>
       </div>
 
       <div class="panel hidden" id="right-ready">
         <div class="panel-icon">🔬</div>
-        <p class="panel-title">Ready to scan</p>
-        <p class="panel-sub">Press <strong>Launch Scanner</strong><br>in the toolbar to start the analysis.</p>
+        <p class="panel-title">Prêt à scanner</p>
+        <p class="panel-sub">Appuyez sur <strong>Lancer le scanner</strong><br>dans la barre d'outils pour démarrer l'analyse.</p>
       </div>
 
       <div class="panel hidden" id="right-scanning">
         <div class="dots"><span></span><span></span><span></span></div>
-        <p class="panel-title">Analyzing…</p>
-        <p class="panel-sub">Running the model on your X-ray</p>
+        <p class="panel-title">Analyse en cours…</p>
+        <p class="panel-sub">Exécution du modèle sur votre radio</p>
       </div>
 
       <div class="results-panel hidden" id="right-results"></div>
     </div>
 
+  </div>
+
+  <!-- HISTORY MODAL -->
+  <div class="modal-overlay hidden" id="history-overlay">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <span class="modal-title" style="display:flex; align-items:center; gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 3"/></svg>
+          Analyses précédentes
+        </span>
+        <button class="modal-close" id="history-close">✕</button>
+      </div>
+      <div class="modal-filters">
+        <div class="date-picker" id="date-picker">
+          <button type="button" class="date-trigger" id="date-trigger">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            <span id="date-trigger-label">Toutes les dates</span>
+          </button>
+          <div class="date-popover hidden" id="date-popover">
+            <div class="date-popover-header">
+              <button type="button" class="date-nav" id="date-prev">‹</button>
+              <span class="date-month-label" id="date-month-label"></span>
+              <button type="button" class="date-nav" id="date-next">›</button>
+            </div>
+            <div class="date-weekdays">
+              <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
+            </div>
+            <div class="date-grid" id="date-grid"></div>
+            <div class="date-popover-footer">
+              <button type="button" class="filter-clear" id="date-clear">Effacer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-body" id="history-body"></div>
+    </div>
   </div>
 </div>
 
@@ -404,6 +592,20 @@
   const rightScanning = document.getElementById('right-scanning');
   const rightResults  = document.getElementById('right-results');
   const rawToggle     = document.getElementById('raw-toggle');
+  const historyBtn    = document.getElementById('history-btn');
+  const historyOverlay= document.getElementById('history-overlay');
+  const historyClose  = document.getElementById('history-close');
+  const historyBody   = document.getElementById('history-body');
+  const datePicker      = document.getElementById('date-picker');
+  const dateTrigger     = document.getElementById('date-trigger');
+  const dateTriggerLabel= document.getElementById('date-trigger-label');
+  const datePopover     = document.getElementById('date-popover');
+  const dateMonthLabel  = document.getElementById('date-month-label');
+  const dateGrid        = document.getElementById('date-grid');
+  const datePrev        = document.getElementById('date-prev');
+  const dateNext        = document.getElementById('date-next');
+  const dateClear       = document.getElementById('date-clear');
+  let allRuns = [];
 
   // ── File selection ─────────────────────────────────────────
   actionBtn.addEventListener('click', () => {
@@ -475,13 +677,13 @@
     rightResults.classList.toggle('hidden',  s !== 'results');
 
     if (s === 'idle') {
-      actionBtn.textContent = '✦  Select a file';
+      actionBtn.textContent = '✦  Sélectionner un fichier';
       actionBtn.disabled = false;
     } else if (s === 'scanning') {
-      actionBtn.textContent = '✦  Scanning…';
+      actionBtn.textContent = '✦  Analyse…';
       actionBtn.disabled = true;
     } else {
-      actionBtn.textContent = '✦  Launch Scanner';
+      actionBtn.textContent = '✦  Lancer le scanner';
       actionBtn.disabled = false;
     }
 
@@ -495,18 +697,18 @@
 
     const badgeMap = {
       normal:            ['badge-normal',    'Normal'],
-      suspected_opacity: ['badge-opacity',   'Suspected opacity'],
-      uncertain:         ['badge-uncertain', 'Uncertain'],
+      suspected_opacity: ['badge-opacity',   'Opacité suspectée'],
+      uncertain:         ['badge-uncertain', 'Incertain'],
     };
     const [bc, bl] = badgeMap[cls] || ['badge-error', cls];
 
     const chips = (arr) => (arr || []).map(x => `<span class="chip">${x}</span>`).join('');
 
     rightResults.innerHTML = `
-      <p class="rx-lbl">Result</p>
+      <p class="rx-lbl">Résultat</p>
       <span class="badge ${bc}">${bl}</span>
 
-      <p class="rx-lbl">Confidence</p>
+      <p class="rx-lbl">Confiance</p>
       <span class="conf-val">${conf}%</span>
       <div class="bar-bg"><div class="bar" id="conf-bar" style="width:0"></div></div>
 
@@ -516,13 +718,13 @@
       <p class="rx-lbl">Observations</p>
       <div>${chips(r.visual_evidence)}</div>
 
-      <p class="rx-lbl">Limitations</p>
+      <p class="rx-lbl">Limites</p>
       <div>${chips(r.limitations)}</div>
 
       <div class="rx-warn">⚠&nbsp; ${r.warning || ''}</div>
 
       <div id="raw-block" class="${rawToggle.checked ? '' : 'hidden'}">
-        <p class="rx-lbl" style="margin-top:1.2rem">Raw output</p>
+        <p class="rx-lbl" style="margin-top:1.2rem">Sortie brute</p>
         <div class="raw-output">${JSON.stringify(r, null, 2)}</div>
       </div>
     `;
@@ -537,6 +739,222 @@
     const b = document.getElementById('raw-block');
     if (b) b.classList.toggle('hidden', !rawToggle.checked);
   });
+
+  // ── History ────────────────────────────────────────────────
+  const badgeMap = {
+    normal:            ['badge-normal',    'Normal'],
+    suspected_opacity: ['badge-opacity',   'Opacité suspectée'],
+    uncertain:         ['badge-uncertain', 'Incertain'],
+  };
+
+  historyBtn.addEventListener('click', openHistory);
+  historyClose.addEventListener('click', closeHistory);
+  historyOverlay.addEventListener('click', (e) => { if (e.target === historyOverlay) closeHistory(); });
+
+  async function openHistory() {
+    historyOverlay.classList.remove('hidden');
+    historyBody.innerHTML = '<div class="history-empty">Chargement…</div>';
+    try {
+      allRuns = await fetch('/runs').then(r => r.json());
+      applyHistoryFilter();
+    } catch (err) {
+      historyBody.innerHTML = '<div class="history-empty">Impossible de charger l\'historique.</div>';
+    }
+  }
+
+  function closeHistory() {
+    historyOverlay.classList.add('hidden');
+    closeDatePopover();
+  }
+
+  function applyHistoryFilter() {
+    const from = pickStart; // "YYYY-MM-DD" or null
+    const to   = pickEnd || pickStart; // single date selection filters that day only
+    const filtered = allRuns.filter((r) => {
+      const runDate = (r.created_at || '').slice(0, 10); // "YYYY-MM-DD"
+      if (from && runDate < from) return false;
+      if (to && runDate > to) return false;
+      return true;
+    });
+    renderHistory(filtered);
+  }
+
+  // ── Date range picker (Airbnb-style: pick one date, or extend to a range) ──
+  let pickStart = null;
+  let pickEnd = null;
+  let hoverIso = null;
+  let viewDate = new Date();
+
+  const MONTH_NAMES = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  const MONTH_SHORT = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const toIso = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+  const formatShort = (iso) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return `${d} ${MONTH_SHORT[m - 1]} ${y}`;
+  };
+
+  dateTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    datePopover.classList.toggle('hidden');
+    dateTrigger.classList.toggle('active', !datePopover.classList.contains('hidden'));
+    if (!datePopover.classList.contains('hidden')) renderCalendar();
+  });
+  document.addEventListener('click', (e) => {
+    // composedPath() is captured at dispatch time, so it stays accurate even if
+    // renderCalendar() replaces the clicked day's DOM node before this handler runs.
+    if (!e.composedPath().includes(datePicker)) closeDatePopover();
+  });
+  datePrev.addEventListener('click', () => {
+    viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1);
+    renderCalendar();
+  });
+  dateNext.addEventListener('click', () => {
+    viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
+    renderCalendar();
+  });
+  dateClear.addEventListener('click', () => {
+    pickStart = null; pickEnd = null; hoverIso = null;
+    renderCalendar();
+    updateDateTriggerLabel();
+    applyHistoryFilter();
+  });
+
+  function closeDatePopover() {
+    datePopover.classList.add('hidden');
+    dateTrigger.classList.remove('active');
+  }
+
+  function updateDateTriggerLabel() {
+    if (pickStart && pickEnd && pickStart !== pickEnd) {
+      dateTriggerLabel.textContent = `${formatShort(pickStart)} – ${formatShort(pickEnd)}`;
+    } else if (pickStart) {
+      dateTriggerLabel.textContent = formatShort(pickStart);
+    } else {
+      dateTriggerLabel.textContent = 'Toutes les dates';
+    }
+  }
+
+  function onDayPick(iso) {
+    if (!pickStart || (pickStart && pickEnd)) {
+      pickStart = iso;
+      pickEnd = null;
+    } else if (iso < pickStart) {
+      pickEnd = pickStart;
+      pickStart = iso;
+    } else {
+      pickEnd = iso;
+    }
+    hoverIso = null;
+    renderCalendar();
+    updateDateTriggerLabel();
+    applyHistoryFilter();
+  }
+
+  function cellClasses(iso, todayIso) {
+    const effectiveEnd = pickEnd || (pickStart && hoverIso ? hoverIso : null);
+    const lo = pickStart && effectiveEnd ? (pickStart < effectiveEnd ? pickStart : effectiveEnd) : null;
+    const hi = pickStart && effectiveEnd ? (pickStart < effectiveEnd ? effectiveEnd : pickStart) : null;
+
+    const classes = ['date-cell'];
+    if (iso === todayIso) classes.push('today');
+    if (iso === pickStart || iso === pickEnd) classes.push('selected');
+    if (lo && hi && iso > lo && iso < hi) classes.push('in-range');
+    if (lo && hi && lo !== hi && iso === lo) classes.push('range-start');
+    if (lo && hi && lo !== hi && iso === hi) classes.push('range-end');
+    return classes.join(' ');
+  }
+
+  // Re-renders the full month grid (new month, new pick, popover just opened).
+  function renderCalendar() {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    dateMonthLabel.textContent = `${MONTH_NAMES[month]} ${year}`;
+
+    const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // Monday = 0
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayIso = toIso(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+
+    let cells = '';
+    for (let i = 0; i < firstWeekday; i++) cells += '<div class="date-cell"></div>';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso = toIso(year, month, d);
+      cells += `<div class="${cellClasses(iso, todayIso)}" data-iso="${iso}"><button type="button">${d}</button></div>`;
+    }
+    dateGrid.innerHTML = cells;
+
+    dateGrid.querySelectorAll('.date-cell[data-iso]').forEach((cell) => {
+      const iso = cell.dataset.iso;
+      cell.querySelector('button').addEventListener('click', () => onDayPick(iso));
+      cell.addEventListener('mouseenter', () => {
+        if (pickStart && !pickEnd && hoverIso !== iso) { hoverIso = iso; updateRangePreview(); }
+      });
+    });
+  }
+
+  // Only refreshes classNames on the existing cells (hover preview) — no DOM
+  // rebuild, so it can't detach the node the user is about to click on.
+  function updateRangePreview() {
+    const todayIso = toIso(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+    dateGrid.querySelectorAll('.date-cell[data-iso]').forEach((cell) => {
+      cell.className = cellClasses(cell.dataset.iso, todayIso);
+    });
+  }
+
+  function renderHistory(runs) {
+    if (!runs || runs.length === 0) {
+      const filtered = pickStart || pickEnd;
+      historyBody.innerHTML = `<div class="history-empty">${filtered ? 'Aucune analyse sur cette période.' : 'Aucune analyse enregistrée pour l\'instant.'}</div>`;
+      return;
+    }
+    historyBody.innerHTML = runs.map((r) => {
+      const [bc, bl] = badgeMap[r.predicted_class] || ['badge-error', r.predicted_class || '—'];
+      const conf = Math.round((r.confidence || 0) * 100);
+      return `
+        <div class="history-item" data-run-id="${r.id}">
+          <div class="history-meta">
+            <div class="history-top">
+              <span class="badge ${bc}">${bl}</span>
+              <span>Cas n°${r.case_id} · ${r.model_name || 'modèle inconnu'}</span>
+            </div>
+            <div class="history-sub">${r.created_at || ''}</div>
+          </div>
+          <span class="history-conf">${conf}%</span>
+        </div>
+      `;
+    }).join('');
+
+    historyBody.querySelectorAll('.history-item').forEach((el) => {
+      el.addEventListener('click', () => loadHistoryRun(runs.find(r => String(r.id) === el.dataset.runId)));
+    });
+  }
+
+  async function loadHistoryRun(run) {
+    if (!run) return;
+    closeHistory();
+    setState('scanning');
+
+    try {
+      const resp = await fetch(`/runs/${run.id}/image`);
+      if (!resp.ok) throw new Error('image unavailable');
+      const blob = await resp.blob();
+      const file = new File([blob], `run-${run.id}.png`, { type: blob.type || 'image/png' });
+      selectedFile = file;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        xrayImg.src = e.target.result;
+        currentResult = run.prediction;
+        setState('results');
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      selectedFile = null;
+      xrayImg.src = '';
+      currentResult = run.prediction;
+      setState('results');
+    }
+  }
 </script>
 </body>
 </html>
