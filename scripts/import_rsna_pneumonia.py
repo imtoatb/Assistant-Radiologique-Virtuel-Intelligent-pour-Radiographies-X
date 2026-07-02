@@ -5,6 +5,7 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 import shutil
+import sys
 
 import kagglehub
 import numpy as np
@@ -26,14 +27,35 @@ def require_pydicom():
     return pydicom
 
 
+def cached_competition_dir() -> Path | None:
+    cache_root = Path.home() / ".cache" / "kagglehub"
+    if not cache_root.exists():
+        return None
+
+    label_files = sorted(cache_root.rglob("stage_2_train_labels.csv"))
+    for labels_path in label_files:
+        root = labels_path.parent
+        try:
+            find_images_dir(root)
+        except RuntimeError:
+            continue
+        return root
+    return None
+
+
 def resolve_competition_dir() -> Path:
     try:
         path = Path(kagglehub.competition_download(COMPETITION))
     except Exception as exc:
+        cached = cached_competition_dir()
+        if cached is not None:
+            print(f"Using cached RSNA competition data: {cached}")
+            return cached
         raise RuntimeError(
             "Could not download RSNA Pneumonia from Kaggle. "
-            "Make sure you are authenticated with Kaggle and that you accepted "
-            "the competition rules for rsna-pneumonia-detection-challenge."
+            "Kaggle authentication failed and no local cache was found. "
+            "Run: python scripts\\configure_kaggle_token.py --check. "
+            "Then accept the rules for rsna-pneumonia-detection-challenge on Kaggle."
         ) from exc
     if not path.exists():
         raise RuntimeError(f"Downloaded competition path does not exist: {path}")
@@ -118,6 +140,8 @@ def import_rsna(images_dir: Path, csv_path: Path, max_cases: int | None, clean: 
     dicom_paths = sorted(train_images_dir.glob("*.dcm"))
     if max_cases is not None:
         dicom_paths = dicom_paths[:max_cases]
+    if not dicom_paths:
+        raise RuntimeError(f"No DICOM files found in {train_images_dir}")
 
     for index, dicom_path in enumerate(dicom_paths, start=1):
         patient_id = dicom_path.stem
@@ -164,4 +188,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc

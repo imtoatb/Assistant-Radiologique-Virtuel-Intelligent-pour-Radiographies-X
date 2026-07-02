@@ -1,0 +1,4 @@
+Toy baseline prompt used only for orchestration and smoke evaluation.
+
+This mode does not call MedGemma. It validates the local pipeline:
+image loading, prediction schema, guardrails, SQLite logging and metrics.

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
 from src.inference import pixel_baseline_predict, toy_predict, vlm_predict_placeholder
-from src.guardrails import apply_safety_guardrails
+from src.guardrails import WARNING_TEXT, apply_safety_guardrails
 
 app = FastAPI(title="RX Analyzer")
 
@@ -64,14 +64,15 @@ async def predict(
             result = apply_safety_guardrails(toy_predict(tmp_path, mode=model))
 
     except Exception as e:
-        result = {
-            "predicted_class": "error",
+        result = apply_safety_guardrails({
+            "image_quality": "unknown",
+            "predicted_class": "uncertain",
             "confidence": 0.0,
             "visual_evidence": ["prediction failed"],
             "justification": str(e),
             "limitations": ["model error"],
-            "warning": "Prediction failed. Check model setup.",
-        }
+            "warning": WARNING_TEXT,
+        })
     finally:
         tmp_path.unlink(missing_ok=True) # supprime le fichier temporaire après l'inférence
 

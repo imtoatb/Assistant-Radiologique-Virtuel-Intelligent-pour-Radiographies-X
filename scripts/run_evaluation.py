@@ -13,7 +13,7 @@ sys.path.append(str(ROOT))
 from src.inference import toy_predict, vlm_predict_placeholder
 from src.guardrails import apply_safety_guardrails, validate_prediction
 from src.metrics import summarize_metrics
-from src.database import insert_evaluation, insert_run, get_evaluations, insert_prompt
+from src.database import insert_evaluation, insert_run, get_evaluations, insert_prompt, seed_cases
 
 import logging
 
@@ -68,12 +68,14 @@ def compute_metrics(db_path):
 # prompt_version : 0 pour baseline, 1/2/3... pour les versions du prompt improved
 def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=None, case_ids=None, sample_n=None, sample_seed=42):
     cases = read_cases(cases_path)
+    seed_cases(db_path, cases_path)
 
     if case_ids is not None:
-        cases = [c for c in cases if int(c['case_id']) in case_ids] # liste de cas
+        selected_ids = {str(value) for value in case_ids}
+        cases = [c for c in cases if c['case_id'] in selected_ids] # liste de cas
 
     elif case_id is not None:
-        cases = [c for c in cases if int(c['case_id']) == case_id] 
+        cases = [c for c in cases if c['case_id'] == str(case_id)]
 
     elif sample_n is not None:
         cases = balanced_sample(cases, n=sample_n, seed=sample_seed)
@@ -99,7 +101,7 @@ def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=Non
             pred = apply_safety_guardrails(vlm_predict_placeholder(image_path, mode=mode, version=prompt_version))
 
         # récupère l'id du run inséré dans la table runs pour l'utiliser ensuite dans insert_evaluation
-        run_id = insert_run(db_path, int(case['case_id']), str(image_path), pred, prompt_id=prompt_id)
+        run_id = insert_run(db_path, case['case_id'], str(image_path), pred, prompt_id=prompt_id)
         insert_evaluation(db_path, run_id, case['label'], pred['predicted_class'])
         logging.info(f"{case['case_id']} — {pred['predicted_class']} ({pred['confidence']:.2f}) latency={pred['latency_ms']}ms")
         print(f"case_id={case['case_id']} | pred={pred['predicted_class']} | conf={pred['confidence']:.2f}")
@@ -114,7 +116,7 @@ def run_full_evaluation(db_path, cases_path, improved_version=1, sample_n=100, s
 def main() -> None:
     parser = argparse.ArgumentParser()
     # choisir entre la fausse IA de test (toy) ou la vraie IA MedGemma (baseline / improved)
-    parser.add_argument('--mode', choices=['toy', 'baseline', 'improved', 'full'], default='toy')
+    parser.add_argument('--mode', choices=['toy', 'baseline', 'improved', 'full'], default='improved')
     parser.add_argument('--db-path', type=Path, default=ROOT / 'data' / 'database.sqlite')
     parser.add_argument('--cases-path', type=Path, default=ROOT / 'data' / 'cases.csv')
 
@@ -122,10 +124,10 @@ def main() -> None:
     parser.add_argument('--max-cases', type=int, default=None)
 
     # version du prompt : 0 pour baseline, 1/2/3... pour les versions du prompt improved
-    parser.add_argument('--prompt-version', type=int, default=0)
+    parser.add_argument('--prompt-version', type=int, default=1)
 
     # choisir un cas spécifique avec son ID (optionnel)
-    parser.add_argument('--case-id', type=int, default=None)
+    parser.add_argument('--case-id', type=str, default=None)
 
     # échantillon aléatoire équilibré de N images (par défaut 100)
     parser.add_argument('--sample-n', type=int, default=None)
@@ -137,7 +139,7 @@ def main() -> None:
     parser.add_argument('--compute-metrics', action='store_true')
 
     # choisir une liste de cas
-    parser.add_argument('--case-ids', type=int, nargs='+', default=None)
+    parser.add_argument('--case-ids', type=str, nargs='+', default=None)
 
     args = parser.parse_args()
 

@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS cases (
-    id INTEGER PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     image_path TEXT NOT NULL,
     source TEXT,
     ground_truth_label TEXT,
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS prompts (
 
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    case_id INTEGER NOT NULL,
+    case_id TEXT NOT NULL,
     prompt_id INTEGER NOT NULL, 
     image_path TEXT,
     model_name TEXT,

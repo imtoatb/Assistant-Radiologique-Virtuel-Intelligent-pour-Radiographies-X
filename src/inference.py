@@ -1,45 +1,60 @@
 from __future__ import annotations
 
-from pathlib import Path
+import gc
+import json
 import re
 import time
-import json
-from typing import Any
 from functools import lru_cache
+from pathlib import Path
+from typing import Any
 
 from PIL import Image, ImageStat
 
+from .guardrails import WARNING_TEXT
 from .pixel_model import extract_features, load_model, model_exists
 from .preprocessing import basic_quality_flag, load_image
 
-from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
-import torch
 
-import gc
+WARNING = WARNING_TEXT
 
 
-WARNING = "Prototype pédagogique. Non destiné au diagnostic. Validation par un professionnel qualifié requise."
+def _torch_cuda_available() -> bool:
+    try:
+        import torch
+    except ImportError:
+        return False
+    return bool(torch.cuda.is_available())
+
+
+def _first_model_device(model: Any) -> Any:
+    return next(model.parameters()).device
+
 
 @lru_cache(maxsize=1)
 def _load_vlm():
-    """ Load the MedGemma-4b-it model and processor from local files only, with 4-bit quantization to limit memory usage."""
+    """Load MedGemma from local files, using 4-bit quantization only on CUDA."""
+    from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
     model_id = "google/medgemma-4b-it"
-    processor = AutoProcessor.from_pretrained(model_id, local_files_only=True) # avoid downloading from Hugging Face Hub
-    quantization_config = BitsAndBytesConfig(load_in_4bit=True) # limit memory usage for the model MedGemma-4b-it
-    
-    # Load the model with device_map="cuda:0" to use GPU if available, and limit max_memory to 20GB
-    model = AutoModelForImageTextToText.from_pretrained(
-        model_id,
-        quantization_config=quantization_config,
-        device_map="cuda:0",
-        local_files_only=True,
-        max_memory={0: "4GB"}
-    )
-    # check if the model is on GPU or CPU
-    print(f"Modèle chargé sur : {next(model.parameters()).device}")
+    processor = AutoProcessor.from_pretrained(model_id, local_files_only=True)
 
+    if _torch_cuda_available():
+        model = AutoModelForImageTextToText.from_pretrained(
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            device_map="auto",
+            local_files_only=True,
+            max_memory={0: "4GB"},
+        )
+    else:
+        model = AutoModelForImageTextToText.from_pretrained(
+            model_id,
+            local_files_only=True,
+        )
+
+    print(f"Model loaded on: {_first_model_device(model)}")
     return processor, model
+
 
 def _filename_signal(image_path: str | Path) -> str:
     name = Path(image_path).name.lower()
@@ -70,6 +85,27 @@ def _confidence(signal: str, image_path: str | Path, mode: str) -> float:
     if signal == "normal":
         return 0.56 + (0.28 * (1.0 - strength)) - mode_penalty
     return 0.45 + (0.12 * strength)
+
+
+def _build_prompt_text(processor: Any, messages: list[dict[str, Any]], prompt: str) -> str:
+    if getattr(processor, "chat_template", None):
+        return processor.apply_chat_template(messages, add_generation_prompt=True)
+    return prompt
+
+
+def _extract_first_json_object(text: str) -> dict[str, Any]:
+    cleaned = re.sub(r"```json\s*|\s*```", "", text).strip()
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(cleaned):
+        if char != "{":
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(cleaned[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
 
 
 def toy_predict(image_path: str | Path, mode: str = "baseline", version: int = 0) -> dict[str, Any]:
@@ -149,54 +185,39 @@ def pixel_baseline_predict(image_path: str | Path) -> dict[str, Any]:
 def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline", version: int = 0) -> dict[str, Any]:
     start = time.perf_counter()
     quality = basic_quality_flag(image_path)
-    # print(f"=== IMAGE QUALITY === {quality} for {image_path}")
     image = load_image(image_path)
 
-    # Lecture du prompt depuis le fichier
     prompt_file = Path(__file__).resolve().parents[1] / "prompts" / f"{mode}_prompt_{version}.txt"
     system_prompt = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else ""
 
-    print("=== PROMPT ===")
-    print(system_prompt[:200])
-    print("=== FIN PROMPT ===")
-
     processor, model = _load_vlm()
-
     messages = [
-        {"role": "user", "content": [
-            {"type": "image"},
-            {"type": "text", "text": system_prompt}
-        ]}
+        {
+            "role": "user",
+            "content": [
+                {"type": "image"},
+                {"type": "text", "text": system_prompt},
+            ],
+        }
     ]
 
-    inputs = processor(
-        text=processor.apply_chat_template(messages, add_generation_prompt=True),
-        images=image,
-        return_tensors="pt"
-    )
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    prompt_text = _build_prompt_text(processor, messages, system_prompt)
+    inputs = processor(text=prompt_text, images=image, return_tensors="pt")
+    device = _first_model_device(model)
+    inputs = {key: value.to(device) for key, value in inputs.items()}
+
     outputs = model.generate(**inputs, max_new_tokens=300)
     response = processor.decode(outputs[0], skip_special_tokens=True)
 
-    # to clear GPU memory after generation 
-    del inputs, outputs # Supprimer la référence à inputs et outputs pour libérer la mémoire
+    del inputs, outputs
     gc.collect()
-    time.sleep(20)
-    torch.cuda.empty_cache()
+    if _torch_cuda_available():
+        import torch
 
-    print("=== RESPONSE BRUTE ===")
-    print(response)
-    print("=== FIN RESPONSE ===")
+        torch.cuda.empty_cache()
 
-    # Extraire la partie après "model" et nettoyer les balises markdown
     response_after_model = response.split("model\n")[-1] if "model\n" in response else response
-    response_clean = re.sub(r'```json\s*|\s*```', '', response_after_model).strip()
-    match = re.search(r'\{.*\}', response_clean, re.DOTALL)
-
-    try:
-        parsed = json.loads(match.group()) if match else {}
-    except json.JSONDecodeError:
-        parsed = {}
+    parsed = _extract_first_json_object(response_after_model)
 
     latency_ms = int((time.perf_counter() - start) * 1000)
     return {
