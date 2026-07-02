@@ -264,6 +264,62 @@
     }
     .history-conf { font-size: 0.8rem; font-weight: 600; color: #64748b; flex-shrink: 0; }
 
+    /* ── Image tabs ──────────────────────────────────────────── */
+    .tabs-bar {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 1rem; padding: 4px 2px;
+      overflow-x: auto; scrollbar-width: thin;
+    }
+    .tabs-bar::-webkit-scrollbar { height: 4px; }
+    .tabs-bar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 999px; }
+
+    .img-tab {
+      position: relative; flex-shrink: 0;
+      width: 52px; height: 52px;
+      border-radius: 10px; overflow: hidden;
+      border: 2px solid transparent;
+      cursor: pointer; background: #0f172a;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .img-tab:hover { transform: translateY(-1px); }
+    .img-tab.active { border-color: #76a8f9; }
+    .img-tab-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .img-tab-thumb-empty { background: #1e293b; }
+
+    .img-tab-dot {
+      position: absolute; bottom: 3px; left: 3px;
+      width: 8px; height: 8px; border-radius: 50%;
+      border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+    }
+    .dot-ready     { background: #cbd5e1; }
+    .dot-scanning  { background: #76a8f9; animation: dot-pulse 1s ease-in-out infinite; }
+    .dot-normal    { background: #22c55e; }
+    .dot-opacity   { background: #ef4444; }
+    .dot-uncertain { background: #eab308; }
+    .dot-error     { background: #94a3b8; }
+    @keyframes dot-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+    .img-tab-close {
+      position: absolute; top: 2px; right: 2px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: rgba(6,9,15,0.65); color: #fff; border: none;
+      font-size: 0.7rem; line-height: 1; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.15s, background 0.15s;
+    }
+    .img-tab:hover .img-tab-close { opacity: 1; }
+    .img-tab-close:hover { background: rgba(220,38,38,0.85); }
+
+    .img-tab-add {
+      flex-shrink: 0; width: 52px; height: 52px;
+      border-radius: 10px; border: 2px dashed #cbd5e1;
+      background: #fff; color: #94a3b8;
+      font-size: 1.3rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .img-tab-add:hover { border-color: #76a8f9; color: #76a8f9; background: #eef4fe; }
+
     /* ── Main grid ───────────────────────────────────────────── */
     .main {
       display: grid;
@@ -484,9 +540,12 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 3"/></svg>
       <span>Historique</span>
     </button>
-    <button class="btn-primary" id="action-btn">✦&nbsp; Sélectionner un fichier</button>
-    <input type="file" id="file-input" accept=".png,.jpg,.jpeg" style="display:none">
+    <button class="btn-primary" id="action-btn">✦&nbsp; Sélectionner des fichiers</button>
+    <input type="file" id="file-input" accept=".png,.jpg,.jpeg" multiple style="display:none">
   </div>
+
+  <!-- IMAGE TABS -->
+  <div class="tabs-bar hidden" id="image-tabs"></div>
 
   <!-- MAIN -->
   <div class="main">
@@ -495,8 +554,8 @@
     <div class="col-left">
       <div id="drop-zone">
         <div class="dz-icon">🩻</div>
-        <p class="dz-title">Déposez une radio thoracique ici</p>
-        <p class="dz-sub">PNG · JPG · JPEG</p>
+        <p class="dz-title">Déposez une ou plusieurs radios thoraciques ici</p>
+        <p class="dz-sub">PNG · JPG · JPEG · sélection multiple</p>
         <button class="dz-btn" id="dz-browse">Parcourir les fichiers</button>
       </div>
 
@@ -505,8 +564,8 @@
         <div class="scan-line hidden" id="scan-line"></div>
         <div class="preview-hint hidden" id="preview-hint">Appuyez sur Lancer le scanner pour analyser</div>
         <div class="img-overlay hidden" id="img-overlay">
-          <div class="overlay-icon">↺</div>
-          <span class="overlay-label">Changer l'image</span>
+          <div class="overlay-icon">＋</div>
+          <span class="overlay-label">Ajouter des images</span>
         </div>
       </div>
     </div>
@@ -522,7 +581,7 @@
       <div class="panel hidden" id="right-ready">
         <div class="panel-icon">🔬</div>
         <p class="panel-title">Prêt à scanner</p>
-        <p class="panel-sub">Appuyez sur <strong>Lancer le scanner</strong><br>dans la barre d'outils pour démarrer l'analyse.</p>
+        <p class="panel-sub" id="ready-sub">Appuyez sur <strong>Lancer le scanner</strong><br>dans la barre d'outils pour démarrer l'analyse.</p>
       </div>
 
       <div class="panel hidden" id="right-scanning">
@@ -574,9 +633,10 @@
 </div>
 
 <script>
-  let state = 'idle';
-  let selectedFile = null;
-  let currentResult = null;
+  // Each entry: { id, file, dataUrl, status: 'ready'|'scanning'|'results', result }
+  let images = [];
+  let activeId = null;
+  let idCounter = 0;
 
   const fileInput     = document.getElementById('file-input');
   const dropZone      = document.getElementById('drop-zone');
@@ -587,8 +647,10 @@
   const previewHint   = document.getElementById('preview-hint');
   const imgOverlay    = document.getElementById('img-overlay');
   const actionBtn     = document.getElementById('action-btn');
+  const tabsBar       = document.getElementById('image-tabs');
   const rightIdle     = document.getElementById('right-idle');
   const rightReady    = document.getElementById('right-ready');
+  const readySub      = document.getElementById('ready-sub');
   const rightScanning = document.getElementById('right-scanning');
   const rightResults  = document.getElementById('right-results');
   const rawToggle     = document.getElementById('raw-toggle');
@@ -609,16 +671,23 @@
 
   // ── File selection ─────────────────────────────────────────
   actionBtn.addEventListener('click', () => {
-    if (state === 'idle') fileInput.click();
-    else if (state === 'ready' || state === 'results') startScan();
+    if (images.length === 0) { fileInput.click(); return; }
+    const readyCount = images.filter(im => im.status === 'ready').length;
+    if (readyCount > 0) {
+      startScan();
+    } else {
+      // everything already scanned: relancer tout le lot
+      images.forEach(im => { if (im.status !== 'scanning') im.status = 'ready'; });
+      renderTabs();
+      startScan();
+    }
   });
   dzBrowse.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
   dropZone.addEventListener('click', () => fileInput.click());
   imgOverlay.addEventListener('click', () => fileInput.click());
 
   fileInput.addEventListener('change', (e) => {
-    const f = e.target.files[0];
-    if (f) loadFile(f);
+    loadFiles(e.target.files);
     fileInput.value = '';
   });
 
@@ -630,64 +699,181 @@
   dropZone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
-    const f = e.dataTransfer.files[0];
-    if (f) loadFile(f);
+    loadFiles(e.dataTransfer.files);
   });
 
-  function loadFile(file) {
-    selectedFile = file;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      xrayImg.src = e.target.result;
-      setState('ready');
-    };
-    reader.readAsDataURL(file);
+  function loadFiles(fileList) {
+    const files = Array.from(fileList || []).filter(f => /\.(png|jpe?g)$/i.test(f.name));
+    if (files.length === 0) return;
+
+    const entries = files.map(f => ({
+      id: 'img-' + (idCounter++), file: f, dataUrl: '', status: 'ready', result: null,
+    }));
+    images.push(...entries);
+    if (!activeId) activeId = entries[0].id;
+    renderTabs();
+    updateMainView();
+
+    entries.forEach((entry) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        entry.dataUrl = e.target.result;
+        renderTabs();
+        if (entry.id === activeId) updateMainView();
+      };
+      reader.readAsDataURL(entry.file);
+    });
   }
 
-  // ── Scan ───────────────────────────────────────────────────
+  // ── Tabs ───────────────────────────────────────────────────
+  function getActive() {
+    return images.find(im => im.id === activeId) || null;
+  }
+
+  function statusDotClass(im) {
+    if (im.status === 'scanning') return 'dot-scanning';
+    if (im.status === 'results') {
+      const cls = im.result && im.result.predicted_class;
+      if (cls === 'normal') return 'dot-normal';
+      if (cls === 'suspected_opacity') return 'dot-opacity';
+      if (cls === 'uncertain') return 'dot-uncertain';
+      return 'dot-error';
+    }
+    return 'dot-ready';
+  }
+
+  function renderTabs() {
+    if (images.length === 0) {
+      tabsBar.classList.add('hidden');
+      tabsBar.innerHTML = '';
+      return;
+    }
+    tabsBar.classList.remove('hidden');
+    tabsBar.innerHTML = images.map((im) => `
+      <div class="img-tab ${im.id === activeId ? 'active' : ''}" data-id="${im.id}" title="${im.file.name}">
+        ${im.dataUrl ? `<img class="img-tab-thumb" src="${im.dataUrl}">` : '<div class="img-tab-thumb img-tab-thumb-empty"></div>'}
+        <span class="img-tab-dot ${statusDotClass(im)}"></span>
+        <button type="button" class="img-tab-close" data-id="${im.id}">×</button>
+      </div>
+    `).join('') + '<button type="button" class="img-tab-add" id="tabs-add-btn" title="Ajouter des images">+</button>';
+
+    tabsBar.querySelectorAll('.img-tab').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.img-tab-close')) return;
+        activeId = el.dataset.id;
+        renderTabs();
+        updateMainView();
+      });
+    });
+    tabsBar.querySelectorAll('.img-tab-close').forEach((btn) => {
+      btn.addEventListener('click', (e) => { e.stopPropagation(); removeImage(btn.dataset.id); });
+    });
+    const addBtn = document.getElementById('tabs-add-btn');
+    if (addBtn) addBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+  }
+
+  function removeImage(id) {
+    const idx = images.findIndex(im => im.id === id);
+    if (idx === -1) return;
+    images.splice(idx, 1);
+    if (activeId === id) {
+      activeId = images.length ? images[Math.min(idx, images.length - 1)].id : null;
+    }
+    renderTabs();
+    updateMainView();
+  }
+
+  // ── Scan (batch) ─────────────────────────────────────────────
   async function startScan() {
-    setState('scanning');
-    const form = new FormData();
-    form.append('file', selectedFile);
-    form.append('model', document.getElementById('model').value);
+    const toScan = images.filter(im => im.status === 'ready');
+    if (toScan.length === 0) return;
 
-    const [result] = await Promise.all([
-      // send the file to the server and wait for the JSON response
-      fetch('/predict', { method: 'POST', body: form }).then(r => r.json()),
-      new Promise(r => setTimeout(r, 2800)),
-    ]);
+    toScan.forEach(im => { im.status = 'scanning'; });
+    renderTabs();
+    updateMainView();
 
-    currentResult = result;
-    setState('results');
+    await Promise.all(toScan.map(scanOne));
+
+    renderTabs();
+    updateMainView();
   }
 
-  // ── State machine ──────────────────────────────────────────
-  function setState(s) {
-    state = s;
+  async function scanOne(im) {
+    try {
+      const form = new FormData();
+      form.append('file', im.file);
+      form.append('model', document.getElementById('model').value);
 
-    dropZone.classList.toggle('hidden',    s !== 'idle');
-    imagePanel.classList.toggle('hidden',  s === 'idle');
-    scanLine.classList.toggle('hidden',    s !== 'scanning');
-    previewHint.classList.toggle('hidden', s !== 'ready');
-    imgOverlay.classList.toggle('hidden',  s !== 'results');
+      const [result] = await Promise.all([
+        fetch('/predict', { method: 'POST', body: form }).then(r => r.json()),
+        new Promise(r => setTimeout(r, 2800)),
+      ]);
+      im.result = result;
+    } catch (err) {
+      im.result = {
+        predicted_class: 'error',
+        model_name: document.getElementById('model').value,
+        confidence: 0,
+        visual_evidence: [],
+        justification: String(err),
+        limitations: ['network error'],
+        warning: "La requête d'analyse a échoué.",
+      };
+    }
+    im.status = 'results';
+    renderTabs();
+    if (im.id === activeId) updateMainView();
+  }
 
-    rightIdle.classList.toggle('hidden',     s !== 'idle');
-    rightReady.classList.toggle('hidden',    s !== 'ready');
-    rightScanning.classList.toggle('hidden', s !== 'scanning');
-    rightResults.classList.toggle('hidden',  s !== 'results');
+  // ── Main view (driven by the active image) ──────────────────
+  function updateMainView() {
+    const active = getActive();
+    const hasImages = images.length > 0;
 
-    if (s === 'idle') {
-      actionBtn.textContent = '✦  Sélectionner un fichier';
-      actionBtn.disabled = false;
-    } else if (s === 'scanning') {
-      actionBtn.textContent = '✦  Analyse…';
-      actionBtn.disabled = true;
-    } else {
-      actionBtn.textContent = '✦  Lancer le scanner';
-      actionBtn.disabled = false;
+    dropZone.classList.toggle('hidden', hasImages);
+    imagePanel.classList.toggle('hidden', !hasImages);
+
+    if (active) {
+      xrayImg.src = active.dataUrl || '';
+      scanLine.classList.toggle('hidden', active.status !== 'scanning');
+      previewHint.classList.toggle('hidden', active.status !== 'ready');
+      imgOverlay.classList.toggle('hidden', active.status !== 'results');
     }
 
-    if (s === 'results' && currentResult) renderResults(currentResult);
+    rightIdle.classList.toggle('hidden', hasImages);
+    rightReady.classList.toggle('hidden', !active || active.status !== 'ready');
+    rightScanning.classList.toggle('hidden', !active || active.status !== 'scanning');
+    rightResults.classList.toggle('hidden', !active || active.status !== 'results');
+
+    if (readySub) {
+      const readyCount = images.filter(im => im.status === 'ready').length;
+      readySub.innerHTML = readyCount > 1
+        ? `<strong>${readyCount} images</strong> prêtes à analyser.<br>Appuyez sur <strong>Lancer le scanner</strong> pour lancer le lot.`
+        : `Appuyez sur <strong>Lancer le scanner</strong><br>dans la barre d'outils pour démarrer l'analyse.`;
+    }
+
+    if (active && active.status === 'results' && active.result) renderResults(active.result);
+
+    updateActionButton();
+  }
+
+  function updateActionButton() {
+    const readyCount = images.filter(im => im.status === 'ready').length;
+    const scanningCount = images.filter(im => im.status === 'scanning').length;
+
+    if (images.length === 0) {
+      actionBtn.textContent = '✦  Sélectionner des fichiers';
+      actionBtn.disabled = false;
+    } else if (scanningCount > 0) {
+      actionBtn.textContent = `✦  Analyse… (${scanningCount})`;
+      actionBtn.disabled = true;
+    } else if (readyCount > 0) {
+      actionBtn.textContent = readyCount > 1 ? `✦  Lancer le scanner (${readyCount})` : '✦  Lancer le scanner';
+      actionBtn.disabled = false;
+    } else {
+      actionBtn.textContent = '↺  Tout relancer';
+      actionBtn.disabled = false;
+    }
   }
 
   // ── Results ────────────────────────────────────────────────
@@ -936,27 +1122,32 @@
   async function loadHistoryRun(run) {
     if (!run) return;
     closeHistory();
-    setState('scanning');
+
+    // Loaded as a new tab so it can be reviewed alongside the current batch.
+    const entry = {
+      id: 'img-' + (idCounter++), file: null, dataUrl: '', status: 'results', result: run.prediction,
+    };
+    images.push(entry);
+    activeId = entry.id;
+    renderTabs();
+    updateMainView();
 
     try {
       const resp = await fetch(`/runs/${run.id}/image`);
       if (!resp.ok) throw new Error('image unavailable');
       const blob = await resp.blob();
       const file = new File([blob], `run-${run.id}.png`, { type: blob.type || 'image/png' });
-      selectedFile = file;
+      entry.file = file;
 
       const reader = new FileReader();
       reader.onload = (e) => {
-        xrayImg.src = e.target.result;
-        currentResult = run.prediction;
-        setState('results');
+        entry.dataUrl = e.target.result;
+        renderTabs();
+        if (entry.id === activeId) updateMainView();
       };
       reader.readAsDataURL(file);
     } catch (err) {
-      selectedFile = null;
-      xrayImg.src = '';
-      currentResult = run.prediction;
-      setState('results');
+      entry.file = new File([], `run-${run.id}.png`);
     }
   }
 </script>
