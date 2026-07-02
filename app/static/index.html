@@ -699,6 +699,8 @@
       normal:            ['badge-normal',    'Normal'],
       suspected_opacity: ['badge-opacity',   'Opacité suspectée'],
       uncertain:         ['badge-uncertain', 'Incertain'],
+      rejected:          ['badge-error',     'Rejetée'],
+      error:             ['badge-error',     'Erreur'],
     };
     const [bc, bl] = badgeMap[cls] || ['badge-error', cls];
 
@@ -745,6 +747,8 @@
     normal:            ['badge-normal',    'Normal'],
     suspected_opacity: ['badge-opacity',   'Opacité suspectée'],
     uncertain:         ['badge-uncertain', 'Incertain'],
+    rejected:          ['badge-error',     'Rejetée'],
+    error:             ['badge-error',     'Erreur'],
   };
 
   historyBtn.addEventListener('click', openHistory);

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import tempfile
 import uuid
@@ -28,11 +29,20 @@ _DATA   = ROOT / "data"
 _UPLOADS = _DATA / "uploads"
 _UPLOADS.mkdir(parents=True, exist_ok=True)
 
+# même fichier que scripts/run_evaluation.py, pour retrouver toutes les évaluations (CLI + web) au même endroit
+_LOGS_DIR = _DATA / "logs"
+_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+logging.basicConfig(
+    filename=str(_LOGS_DIR / "run_evaluation.log"),
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
 
 def _log_run(image_path: Path, model: str, prompt_version: int, result: dict) -> None:
-    """Persiste l'image (anonymisée) et logge le run en base pour qu'il apparaisse dans l'historique."""
+    """Persiste l'image (anonymisée), logge le run en base pour l'historique web, et trace l'évaluation dans run_evaluation.log."""
     try:
         dest = _UPLOADS / f"{uuid.uuid4().hex}{image_path.suffix}"
         shutil.copy(image_path, dest)
@@ -44,6 +54,10 @@ def _log_run(image_path: Path, model: str, prompt_version: int, result: dict) ->
             prompt_text="",
         )
         insert_run(DEFAULT_DB, case_id, str(dest), result, prompt_id)
+        logging.info(
+            f"[web] {case_id} — {result.get('predicted_class')} "
+            f"({result.get('confidence', 0.0):.2f}) latency={result.get('latency_ms', 0)}ms"
+        )
     except Exception as e:
         print(f"[history] failed to log run: {e}")
 
@@ -94,9 +108,9 @@ async def predict(
     #Validation
     validation = validate_image(tmp_path)
     if not validation["is_xray"]:
-        tmp_path.unlink(missing_ok=True)
-        return {
+        result = {
             "predicted_class": "rejected",
+            "model_name": "validation",
             "confidence": 0.0,
             "visual_evidence": [],
             "justification": validation["reason"],
@@ -104,6 +118,16 @@ async def predict(
             "warning": "L'image soumise ne semble pas être une radiographie thoracique.",
             "is_xray": False,
         }
+        # on anonymise avant de logger, même une image rejetée peut contenir des métadonnées sensibles
+        try:
+            rejected_path = anonymize_to_path(tmp_path)
+        except Exception:
+            rejected_path = tmp_path
+        _log_run(rejected_path, model, prompt_version, result)
+        if rejected_path != tmp_path:
+            rejected_path.unlink(missing_ok=True)
+        tmp_path.unlink(missing_ok=True)
+        return result
 
     #suppression des métadonnées
     clean_path = anonymize_to_path(tmp_path)
@@ -124,12 +148,14 @@ async def predict(
     except Exception as e:
         result = {
             "predicted_class": "error",
+            "model_name": model,
             "confidence": 0.0,
             "visual_evidence": ["prediction failed"],
             "justification": str(e),
             "limitations": ["model error"],
             "warning": "Prediction failed. Check model setup.",
         }
+        _log_run(clean_path, model, prompt_version, result)
     finally:
         clean_path.unlink(missing_ok=True)
 
