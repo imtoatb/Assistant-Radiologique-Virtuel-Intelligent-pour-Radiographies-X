@@ -1,10 +1,15 @@
 venv/
+.venv/
 __pycache__/
 *.pyc
 .pytest_cache/
 .ipynb_checkpoints/
 tmp_uploads/
+data/uploads/
 database.sqlite
+*.sqlite.bak
+data/database_kaggle_dataset.sqlite
+data/brutes_rsa/
 eval/outputs/
 .env
 .DS_Store
