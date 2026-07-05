@@ -2,7 +2,7 @@ import sys
 sys.path.append(".")
 from src.anonymizer import audit_metadata, anonymize_to_path
 
-path = "data/brutes/ABNORMAL-LUNG_00001_suspected_opacity_001.jpg"
+path = "data/brutes_kaggle/ABNORMAL-LUNG_00001_suspected_opacity_001.jpg"
 
 print("aVANT anonymisation")
 avant = audit_metadata(path)

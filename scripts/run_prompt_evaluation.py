@@ -13,7 +13,7 @@ sys.path.append(str(ROOT))
 from src.inference import toy_predict, vlm_predict_placeholder
 from src.guardrails import apply_safety_guardrails, validate_prediction
 from src.metrics import summarize_metrics
-from src.database import insert_evaluation, insert_run, get_evaluations, insert_prompt
+from src.database import insert_evaluation, insert_run, get_evaluations, insert_prompt, get_case_ids_with_prompt
 
 import logging
 
@@ -87,7 +87,15 @@ def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=Non
     prompt_text = prompt_path.read_text(encoding="utf-8")
     prompt_id = insert_prompt(db_path, prompt_name=prompt_name, prompt_version=f"v{prompt_version}", prompt_text=prompt_text)
 
+    # cas deja testes avec ce prompt exact (meme nom et meme version) : on ne relance pas l'inference dessus
+    already_done = get_case_ids_with_prompt(db_path, prompt_id)
+
     for i, case in enumerate(cases, 1):
+        case_id = int(case['case_id'])
+        if case_id in already_done:
+            print(f"[{i}/{len(cases)}] case_id={case_id} deja evalue avec {prompt_name} v{prompt_version}, ignore")
+            continue
+
         print(f"[{i}/{len(cases)}]", "**"*100)
         image_path = ROOT / case['image_path']
 
@@ -99,10 +107,10 @@ def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=Non
             pred = apply_safety_guardrails(vlm_predict_placeholder(image_path, mode=mode, version=prompt_version))
 
         # récupère l'id du run inséré dans la table runs pour l'utiliser ensuite dans insert_evaluation
-        run_id = insert_run(db_path, int(case['case_id']), str(image_path), pred, prompt_id=prompt_id)
+        run_id = insert_run(db_path, case_id, str(image_path), pred, prompt_id=prompt_id)
         insert_evaluation(db_path, run_id, case['label'], pred['predicted_class'])
-        logging.info(f"{case['case_id']} — {pred['predicted_class']} ({pred['confidence']:.2f}) latency={pred['latency_ms']}ms")
-        print(f"case_id={case['case_id']} | pred={pred['predicted_class']} | conf={pred['confidence']:.2f}")
+        logging.info(f"{case_id} — {pred['predicted_class']} ({pred['confidence']:.2f}) latency={pred['latency_ms']}ms")
+        print(f"case_id={case_id} | pred={pred['predicted_class']} | conf={pred['confidence']:.2f}")
 
 # lance automatiquement baseline puis improved sur le même échantillon équilibré de 100 images
 def run_full_evaluation(db_path, cases_path, improved_version=1, sample_n=100, sample_seed=42):
