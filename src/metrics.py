@@ -14,8 +14,15 @@ def accuracy(y_true: Iterable[str], y_pred: Iterable[str]) -> float:
     return sum(a == b for a, b in zip(y_true, y_pred)) / len(y_true)
 
 
-def macro_f1(y_true: Iterable[str], y_pred: Iterable[str], classes: list[str] = CLASSES) -> float:
+def macro_f1(y_true: Iterable[str], y_pred: Iterable[str], classes: list[str] | None = None) -> float:
     y_true = list(y_true); y_pred = list(y_pred)
+    # ne moyenne que sur les classes reellement presentes dans le ground truth
+    # sinon une classe absente du dataset (ex: "uncertain") a un F1 force a 0
+    # et plombe artificiellement le macro-F1 (comportement par defaut de sklearn)
+    if classes is None:
+        classes = sorted(set(y_true))
+    if not classes:
+        return 0.0
     scores = []
     for c in classes:
         tp = sum(t == c and p == c for t, p in zip(y_true, y_pred))

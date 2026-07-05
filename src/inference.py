@@ -16,9 +16,49 @@ from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndByte
 import torch
 
 import gc
+import subprocess
 
 
 WARNING = "Prototype pédagogique. Non destiné au diagnostic. Validation par un professionnel qualifié requise."
+
+# seuil au dela duquel on attend que le GPU refroidisse (GPU laptop 6 Go, risque de surchauffe)
+GPU_TEMP_THRESHOLD_C = 79
+# intervalle entre deux mesures de temperature pendant l'attente
+GPU_COOLDOWN_CHECK_SECONDS = 5
+# temps d'attente maximum avant d'abandonner le controle de temperature
+GPU_TEMP_MAX_WAIT_SECONDS = 120
+# pause de secours si nvidia-smi est indisponible (on ne peut pas mesurer la temperature)
+PAUSE_GPU_FALLBACK_SECONDS = 20
+
+
+def _gpu_temperature_celsius() -> int | None:
+    try:
+        output = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"],
+            text=True,
+            timeout=5,
+        )
+        return int(output.strip().splitlines()[0])
+    except Exception:
+        return None
+
+
+def _wait_for_gpu_cooldown() -> None:
+    temp = _gpu_temperature_celsius()
+    if temp is None:
+        time.sleep(PAUSE_GPU_FALLBACK_SECONDS)
+        torch.cuda.empty_cache()
+        return
+
+    print(f"Température GPU : {temp}°C")
+    waited = 0
+    while temp > GPU_TEMP_THRESHOLD_C and waited < GPU_TEMP_MAX_WAIT_SECONDS:
+        print(f"GPU trop chaud ({temp}°C > {GPU_TEMP_THRESHOLD_C}°C), pause de {GPU_COOLDOWN_CHECK_SECONDS}s")
+        time.sleep(GPU_COOLDOWN_CHECK_SECONDS)
+        waited += GPU_COOLDOWN_CHECK_SECONDS
+        temp = _gpu_temperature_celsius()
+
+    torch.cuda.empty_cache()
 
 @lru_cache(maxsize=1)
 def _load_vlm():
@@ -26,7 +66,9 @@ def _load_vlm():
 
     model_id = "google/medgemma-4b-it"
     processor = AutoProcessor.from_pretrained(model_id, local_files_only=True) # avoid downloading from Hugging Face Hub
-    quantization_config = BitsAndBytesConfig(load_in_4bit=True) # limit memory usage for the model MedGemma-4b-it
+    # bnb_4bit_compute_dtype=bfloat16 : les calculs se font en bfloat16 au lieu du float32 par defaut
+    # plus rapide sur les tensor cores, aucun changement de memoire allouee ni de device
+    quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
     
     # Load the model with device_map="cuda:0" to use GPU if available, and limit max_memory to 20GB
     model = AutoModelForImageTextToText.from_pretrained(
@@ -147,7 +189,6 @@ def pixel_baseline_predict(image_path: str | Path) -> dict[str, Any]:
 
 
 def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline", version: int = 0) -> dict[str, Any]:
-    start = time.perf_counter()
     quality = basic_quality_flag(image_path)
     # print(f"=== IMAGE QUALITY === {quality} for {image_path}")
     image = load_image(image_path)
@@ -162,6 +203,10 @@ def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline", vers
 
     processor, model = _load_vlm()
 
+    # chrono demarre apres le chargement du modele : le premier appel du process ne doit pas
+    # voir sa latence gonflee par le temps de chargement/quantification, qui n'arrive qu'une fois
+    start = time.perf_counter()
+
     messages = [
         {"role": "user", "content": [
             {"type": "image"},
@@ -175,14 +220,15 @@ def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline", vers
         return_tensors="pt"
     )
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
-    outputs = model.generate(**inputs, max_new_tokens=300)
+    outputs = model.generate(**inputs, max_new_tokens=200)
     response = processor.decode(outputs[0], skip_special_tokens=True)
 
-    # to clear GPU memory after generation 
-    del inputs, outputs # Supprimer la référence à inputs et outputs pour libérer la mémoire
+    # latence mesurée uniquement sur l'inférence, avant la pause de refroidissement du GPU
+    latency_ms = int((time.perf_counter() - start) * 1000)
+
+    del inputs, outputs
     gc.collect()
-    time.sleep(20)
-    torch.cuda.empty_cache()
+    _wait_for_gpu_cooldown()
 
     print("=== RESPONSE BRUTE ===")
     print(response)
@@ -198,7 +244,6 @@ def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline", vers
     except json.JSONDecodeError:
         parsed = {}
 
-    latency_ms = int((time.perf_counter() - start) * 1000)
     return {
         "image_quality": quality,
         "predicted_class": parsed.get("predicted_class", "uncertain"),

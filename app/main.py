@@ -29,7 +29,7 @@ _DATA   = ROOT / "data"
 _UPLOADS = _DATA / "uploads"
 _UPLOADS.mkdir(parents=True, exist_ok=True)
 
-# même fichier que scripts/run_evaluation.py, pour retrouver toutes les évaluations (CLI + web) au même endroit
+# même fichier que scripts/run_prompt_evaluation.py, pour retrouver toutes les évaluations (CLI + web) au même endroit
 _LOGS_DIR = _DATA / "logs"
 _LOGS_DIR.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
@@ -133,6 +133,11 @@ async def predict(
     clean_path = anonymize_to_path(tmp_path)
     tmp_path.unlink(missing_ok=True)
 
+    # nom du prompt a logger : doit correspondre au mode reellement utilise pour l'inference
+    # (sinon les tests via l'UI web creent un prompt "vlm_improved" different du "improved" du script d'evaluation)
+    prompt_name_by_model = {"vlm": "baseline", "vlm_improved": "improved"}
+    log_model = prompt_name_by_model.get(model, model)
+
     try:
         if model == "pixel_baseline":
             result = apply_safety_guardrails(pixel_baseline_predict(clean_path))
@@ -143,7 +148,7 @@ async def predict(
         else:
             result = apply_safety_guardrails(toy_predict(clean_path, mode=model))
 
-        _log_run(clean_path, model, prompt_version, result)
+        _log_run(clean_path, log_model, prompt_version, result)
 
     except Exception as e:
         result = {
@@ -155,7 +160,7 @@ async def predict(
             "limitations": ["model error"],
             "warning": "Prediction failed. Check model setup.",
         }
-        _log_run(clean_path, model, prompt_version, result)
+        _log_run(clean_path, log_model, prompt_version, result)
     finally:
         clean_path.unlink(missing_ok=True)
 

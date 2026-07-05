@@ -176,6 +176,14 @@ def get_runs(db_path: str | Path = DEFAULT_DB) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_case_ids_with_prompt(db_path: str | Path, prompt_id: int) -> set[int]:
+    """Retourne les case_id déjà évalués avec ce prompt_id précis, pour éviter de relancer l'inférence dessus """
+    conn = connect(db_path)
+    rows = conn.execute("SELECT case_id FROM runs WHERE prompt_id = ?", (prompt_id,)).fetchall()
+    conn.close()
+    return {row["case_id"] for row in rows}
+
+
 def get_cases(db_path: str | Path = DEFAULT_DB) -> list[dict]:
     """Retourne toutes les radiographies de la table cases """
     conn = connect(db_path)

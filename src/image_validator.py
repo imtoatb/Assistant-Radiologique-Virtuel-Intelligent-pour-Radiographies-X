@@ -36,7 +36,7 @@ RATIO_MAX = 2.0
 #Seuil de niveaux de gris : la saturation moyenne doit être très faible
 #On travaille en RGB et on calcule l'écart max entre canaux R, G, B par pixel
 #Si l'image est vraiment en gris, cet écart est proche de 0
-GRAYSCALE_THRESHOLD = 15.0                                                  # écart max moyen entre canaux (sur 255)
+GRAYSCALE_THRESHOLD = 10.0                                                  # écart max moyen entre canaux (sur 255)
 
 #une radio n'est pas toute noire ni toute blanche
 CONTRAST_MIN = 20.0                                                         #stddev minimale sur les niveaux de gris (sur 255)
