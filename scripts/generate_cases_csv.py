@@ -1,25 +1,23 @@
 """
 generate_cases_csv.py
-Parcourt data/brutes/, extrait le label depuis le nom de fichier,
-et génère data/cases.csv pour alimenter la table radios via seed_radios().
+Parcourt un dossier d'images, extrait le label depuis le nom de fichier,
+et génère un CSV pour alimenter la table cases via seed_cases().
 
-Usage : python scripts/generate_cases_csv.py
+Usage : python scripts/generate_cases_csv.py --brutes-dir data/brutes_kaggle --source fkarimovv/abnormal-lung --output-csv data/cases_kaggle_dataset.csv
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
-import re
 from pathlib import Path
 
-# Constants
-BRUTES_DIR = Path(__file__).resolve().parents[1] / "data" / "brutes"
-OUTPUT_CSV = Path(__file__).resolve().parents[1] / "data" / "cases.csv"
-SOURCE = "fkarimovv/abnormal-lung"
+ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
 
-# extrait le label depuis le nom de fichier
+# extrait le label depuis le nom de fichier (fonctionne pour Kaggle et RSNA,
+# les deux embarquent le label en toutes lettres dans le nom de fichier)
 def extract_label(filename: str) -> str:
     name = filename.lower()
     if "suspected_opacity" in name:
@@ -29,44 +27,45 @@ def extract_label(filename: str) -> str:
     return "uncertain"
 
 
-# Génère le CSV à partir des images dans data/brutes/
+# Génère le CSV à partir des images dans brutes_dir
 def main() -> None:
-    # Récupère toutes les images dans le dossier BRUTES_DIR avec les suffixes autorisés
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--brutes-dir", type=Path, default=ROOT / "data" / "brutes_kaggle")
+    parser.add_argument("--output-csv", type=Path, default=ROOT / "data" / "cases_kaggle_dataset.csv")
+    parser.add_argument("--source", default="fkarimovv/abnormal-lung")
+    args = parser.parse_args()
+
     images = sorted(
-        p for p in BRUTES_DIR.iterdir()
+        p for p in args.brutes_dir.iterdir()
         if p.suffix.lower() in ALLOWED_SUFFIXES
     )
 
     if not images:
-        print(f"Aucune image trouvée dans {BRUTES_DIR}")
+        print(f"Aucune image trouvée dans {args.brutes_dir}")
         return
 
     rows = []
-    # Parcourt les images et extrait le label pour chaque image
     for i, img in enumerate(images, start=1):
         label = extract_label(img.name)
-        case_id = i
         rows.append({
-            "case_id": case_id,
-            "image_path": f"data/brutes/{img.name}",
-            "source": SOURCE,
+            "case_id": i,
+            "image_path": img.relative_to(ROOT).as_posix(),
+            "source": args.source,
             "label": label,
             "split": "external",
             "notes": f"Importé depuis {img.name}",
         })
-    
-    # écrit le CSV avec les colonnes : case_id, image_path, source, label, split, notes
-    with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
+
+    with open(args.output_csv, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["case_id", "image_path", "source", "label", "split", "notes"])
         writer.writeheader()
         writer.writerows(rows)
 
-    # compte le nombre d'images par label pour l'affichage
     normal = sum(1 for r in rows if r["label"] == "normal")
     suspected = sum(1 for r in rows if r["label"] == "suspected_opacity")
     uncertain = sum(1 for r in rows if r["label"] == "uncertain")
 
-    print(f"CSV généré : {OUTPUT_CSV}")
+    print(f"CSV généré : {args.output_csv}")
     print(f"Total : {len(rows)} images")
     print(f"normal : {normal}")
     print(f"suspected_opacity : {suspected}")

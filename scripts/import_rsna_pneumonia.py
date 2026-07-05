@@ -26,17 +26,30 @@ def require_pydicom():
     return pydicom
 
 
-def resolve_competition_dir() -> Path:
-    try:
-        path = Path(kagglehub.competition_download(COMPETITION))
-    except Exception as exc:
-        raise RuntimeError(
-            "Could not download RSNA Pneumonia from Kaggle. "
-            "Make sure you are authenticated with Kaggle and that you accepted "
-            "the competition rules for rsna-pneumonia-detection-challenge."
-        ) from exc
+def resolve_competition_dir(dataset: str | None) -> Path:
+    # la competition originale est fermee depuis 2018 : si --dataset est fourni,
+    # on telecharge un dataset Kaggle classique (miroir) au lieu de la competition
+    if dataset:
+        try:
+            path = Path(kagglehub.dataset_download(dataset))
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not download Kaggle dataset {dataset}. "
+                "Make sure you are authenticated with Kaggle and that the dataset handle is correct."
+            ) from exc
+    else:
+        try:
+            path = Path(kagglehub.competition_download(COMPETITION))
+        except Exception as exc:
+            raise RuntimeError(
+                "Could not download RSNA Pneumonia from Kaggle. "
+                "Make sure you are authenticated with Kaggle and that you accepted "
+                "the competition rules for rsna-pneumonia-detection-challenge. "
+                "If the competition is closed and this keeps failing, try a mirrored "
+                "dataset instead with --dataset <owner>/<name>."
+            ) from exc
     if not path.exists():
-        raise RuntimeError(f"Downloaded competition path does not exist: {path}")
+        raise RuntimeError(f"Downloaded path does not exist: {path}")
     return path
 
 
@@ -102,13 +115,14 @@ def clean_output(images_dir: Path, csv_path: Path) -> None:
         csv_path.unlink()
 
 
-def import_rsna(images_dir: Path, csv_path: Path, max_cases: int | None, clean: bool) -> None:
+def import_rsna(images_dir: Path, csv_path: Path, max_cases: int | None, clean: bool, dataset: str | None) -> None:
     if clean:
         clean_output(images_dir, csv_path)
 
-    competition_dir = resolve_competition_dir()
-    labels_path = find_file(competition_dir, "stage_2_train_labels.csv")
-    train_images_dir = find_images_dir(competition_dir)
+    source_dir = resolve_competition_dir(dataset)
+    source_name = dataset or COMPETITION
+    labels_path = find_file(source_dir, "stage_2_train_labels.csv")
+    train_images_dir = find_images_dir(source_dir)
     labels = read_labels(labels_path)
 
     images_dir.mkdir(parents=True, exist_ok=True)
@@ -123,14 +137,16 @@ def import_rsna(images_dir: Path, csv_path: Path, max_cases: int | None, clean: 
         patient_id = dicom_path.stem
         metadata = labels.get(patient_id, {"label": "uncertain", "boxes": []})
         label = metadata["label"]
-        case_id = f"RSNA_PNEUMONIA_{index:05d}"
+        # case_id doit rester un entier simple : src/database.py fait int(case_id)
+        # partout (insert_case, seed_cases), un id de la forme "RSNA_PNEUMONIA_00001" ferait planter l'insertion
+        case_id = index
         target_path = images_dir / f"rsna_pneumonia_{label}_{index:05d}.png"
         dicom_to_png(dicom_path, target_path)
         rows.append(
             {
                 "case_id": case_id,
                 "image_path": target_path.relative_to(ROOT).as_posix(),
-                "source": COMPETITION,
+                "source": source_name,
                 "source_patient_id": patient_id,
                 "label": label,
                 "split": "external",
@@ -153,14 +169,22 @@ def import_rsna(images_dir: Path, csv_path: Path, max_cases: int | None, clean: 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--images-dir", type=Path, default=ROOT / "data" / "rsna_pneumonia_images")
-    parser.add_argument("--csv-path", type=Path, default=ROOT / "data" / "rsna_pneumonia_cases.csv")
+    parser.add_argument("--images-dir", type=Path, default=ROOT / "data" / "brutes_rsa")
+    parser.add_argument("--csv-path", type=Path, default=ROOT / "data" / "cases.csv")
     parser.add_argument("--max-cases", type=int, default=150)
     parser.add_argument("--clean", action="store_true")
+    parser.add_argument(
+        "--dataset",
+        default=None,
+        help=(
+            "Kaggle dataset handle to use instead of the (closed) competition, "
+            "e.g. sovitrath/rsna-pneumonia-detection-2018"
+        ),
+    )
     args = parser.parse_args()
 
     max_cases = None if args.max_cases <= 0 else args.max_cases
-    import_rsna(args.images_dir, args.csv_path, max_cases=max_cases, clean=args.clean)
+    import_rsna(args.images_dir, args.csv_path, max_cases=max_cases, clean=args.clean, dataset=args.dataset)
 
 
 if __name__ == "__main__":
