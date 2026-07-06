@@ -1,0 +1,15 @@
+Classify this frontal chest X-ray.
+
+Return only valid JSON:
+{
+  "image_quality": "good | not good",
+  "predicted_class": "normal | suspected_opacity | uncertain",
+  "confidence": 0.75,
+  "visual_evidence": ["short factual observation"],
+  "justification": "short justification linked to visible evidence",
+  "limitations": ["image quality", "projection", "lack of clinical context"],
+  "warning": "Educational prototype only. Not for diagnosis. A qualified clinician must verify the image."
+}
+
+If confidence < 0.60, predicted_class must be "uncertain".
+Answer in french, except JSON keys which must remain in English.

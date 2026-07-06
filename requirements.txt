@@ -17,3 +17,8 @@ transformers==5.13.0
 accelerate==1.14.0
 kagglehub==1.0.2
 bitsandbytes==0.49.2
+
+# Notebooks uniquement (visualisation) : non requis par src/ ou app/
+seaborn==0.13.2
+matplotlib==3.11.0
+ipykernel==7.3.0

@@ -188,7 +188,72 @@ def pixel_baseline_predict(image_path: str | Path) -> dict[str, Any]:
     }
 
 
-def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline", version: int = 0) -> dict[str, Any]:
+# deux strategies pour combiner le classifieur pixel auxiliaire (voir scripts/train_pixel_baseline.py)
+# avec MedGemma, testees sur RSNA :
+# - hybrid_predict : triage, MedGemma n'intervient que si le pixel n'est pas confiant. Jamais teste en pratique.
+# - aux_informed_predict : MedGemma est toujours appele et recoit l'avis du pixel en contexte texte.
+#   Resultat mesure : le classifieur pixel seul (66.8% accuracy) fait mieux que cette combinaison (53.9%),
+#   MedGemma a tendance a degrader un avis pixel deja bon plutot qu'a l'ameliorer.
+
+# seuil de confiance du classifieur pixel au dela duquel on lui fait confiance directement
+# en dessous, le cas est juge ambigu et part sur MedGemma
+HYBRID_PIXEL_CONFIDENCE_THRESHOLD = 0.75
+
+
+def hybrid_predict(image_path: str | Path, mode: str = "improved", version: int = 4,
+                    pixel_model_path: str | Path | None = None,
+                    pixel_confidence_threshold: float = HYBRID_PIXEL_CONFIDENCE_THRESHOLD) -> dict[str, Any]:
+    """ Classifieur auxiliaire pixel en premier ; MedGemma seulement si le pixel n'est pas confiant. """
+    start = time.perf_counter()
+    quality = basic_quality_flag(image_path)
+
+    if pixel_model_path is not None and model_exists(pixel_model_path):
+        model = load_model(pixel_model_path)
+        features = extract_features(image_path).reshape(1, -1)
+        pred = str(model.predict(features)[0])
+        conf = float(max(model.predict_proba(features)[0]))
+
+        if conf >= pixel_confidence_threshold:
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            return {
+                "image_quality": quality,
+                "predicted_class": pred,
+                "confidence": round(conf, 3),
+                "visual_evidence": ["classification automatique par le classifieur pixel auxiliaire"],
+                "justification": f"Classifieur auxiliaire confiant (confiance {conf:.2f}), MedGemma non sollicité pour ce cas.",
+                "limitations": ["pas d'analyse visuelle qualitative pour ce cas", "modele statistique simple, pas un VLM"],
+                "warning": WARNING,
+                "model_name": "pixel-baseline-triage",
+                "prompt_version": f"{mode}_v{version}",
+                "latency_ms": latency_ms,
+            }
+
+    return vlm_predict_placeholder(image_path, mode=mode, version=version)
+
+
+def aux_informed_predict(image_path: str | Path, mode: str = "improved", version: int = 4,
+                          pixel_model_path: str | Path | None = None) -> dict[str, Any]:
+    """ Le classifieur pixel donne toujours son avis, MedGemma est toujours appele et recoit cet avis en contexte. """
+    aux_context = ""
+
+    if pixel_model_path is not None and model_exists(pixel_model_path):
+        model = load_model(pixel_model_path)
+        features = extract_features(image_path).reshape(1, -1)
+        aux_pred = str(model.predict(features)[0])
+        aux_conf = float(max(model.predict_proba(features)[0]))
+        aux_context = (
+            f"\n\nA preliminary automated statistical classifier (based on pixel intensity, contrast and edges, "
+            f"not a medical model) estimates this image is more likely \"{aux_pred}\" (confidence {aux_conf:.2f}). "
+            f"Use this only as one additional signal. Base your final answer primarily on what you directly "
+            f"observe in the image, and disagree with this estimate if the image does not support it.\n"
+        )
+
+    result = vlm_predict_placeholder(image_path, mode=mode, version=version, extra_context=aux_context)
+    result["model_name"] = "medgemma-4b-it+pixel-aux"
+    return result
+
+
+def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline", version: int = 0, extra_context: str = "") -> dict[str, Any]:
     quality = basic_quality_flag(image_path)
     # print(f"=== IMAGE QUALITY === {quality} for {image_path}")
     image = load_image(image_path)
@@ -196,6 +261,7 @@ def vlm_predict_placeholder(image_path: str | Path, mode: str = "baseline", vers
     # Lecture du prompt depuis le fichier
     prompt_file = Path(__file__).resolve().parents[1] / "prompts" / f"{mode}_prompt_{version}.txt"
     system_prompt = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else ""
+    system_prompt = system_prompt + extra_context
 
     print("=== PROMPT ===")
     print(system_prompt[:200])

@@ -10,8 +10,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from src.inference import toy_predict, vlm_predict_placeholder
-from src.guardrails import apply_safety_guardrails, validate_prediction
+from src.inference import toy_predict, vlm_predict_placeholder, aux_informed_predict
+from src.guardrails import apply_safety_guardrails
 from src.metrics import summarize_metrics
 from src.database import insert_evaluation, insert_run, get_evaluations, insert_prompt, get_case_ids_with_prompt
 
@@ -26,13 +26,6 @@ logging.basicConfig(
 def read_cases(path: Path) -> list[dict]:
     with path.open(newline='', encoding='utf-8') as f:
         return list(csv.DictReader(f))
-
-def write_csv(path: Path, rows: list[dict]) -> None:
-    if not rows:
-        return
-    with path.open('w', newline='', encoding='utf-8') as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-        w.writeheader(); w.writerows(rows)
 
 # sélectionne un échantillon aléatoire équilibré entre normal et suspected_opacity
 # seed permet de reproduire le même échantillon pour comparer baseline vs improved sur les mêmes images
@@ -66,14 +59,14 @@ def compute_metrics(db_path):
 # permet d'exécuter le modèle sur un ensemble de cas et de stocker les résultats dans la base de données
 # mode : 'toy' pour la fausse IA de test, 'baseline' ou 'improved' pour MedGemma
 # prompt_version : 0 pour baseline, 1/2/3... pour les versions du prompt improved
-def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=None, case_ids=None, sample_n=None, sample_seed=42):
+def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=None, case_ids=None, sample_n=None, sample_seed=42, aux_model_path=None):
     cases = read_cases(cases_path)
 
     if case_ids is not None:
         cases = [c for c in cases if int(c['case_id']) in case_ids] # liste de cas
 
     elif case_id is not None:
-        cases = [c for c in cases if int(c['case_id']) == case_id] 
+        cases = [c for c in cases if int(c['case_id']) == case_id]
 
     elif sample_n is not None:
         cases = balanced_sample(cases, n=sample_n, seed=sample_seed)
@@ -81,9 +74,12 @@ def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=Non
     elif max_cases is not None:
         cases = cases[:max_cases]
 
-    # le nom du prompt correspond au mode pour baseline/improved, et à "toy" pour le mode de test
+    # le nom du prompt correspond au mode pour baseline/improved et à "toy" pour le mode de test
+    # suffixe "_aux" quand le classifieur pixel donne son avis a MedGemma : evite de melanger avec les runs sans avis
     prompt_name = mode if mode in ["baseline", "improved"] else "toy"
-    prompt_path = ROOT / "prompts" / f"{prompt_name}_prompt_{prompt_version}.txt"
+    if aux_model_path is not None:
+        prompt_name = f"{prompt_name}_aux"
+    prompt_path = ROOT / "prompts" / f"{mode}_prompt_{prompt_version}.txt"
     prompt_text = prompt_path.read_text(encoding="utf-8")
     prompt_id = insert_prompt(db_path, prompt_name=prompt_name, prompt_version=f"v{prompt_version}", prompt_text=prompt_text)
 
@@ -102,7 +98,10 @@ def run(mode, db_path, cases_path, max_cases=None, prompt_version=0, case_id=Non
         # fausse IA basée sur le nom de fichier, utilisée uniquement pour tester le pipeline
         if mode == "toy":
             pred = apply_safety_guardrails(toy_predict(image_path, mode="baseline", version=0))
-        # vraie IA MedGemma avec le prompt baseline ou improved
+        # MedGemma informe par l'avis du classifieur pixel auxiliaire
+        elif aux_model_path is not None:
+            pred = apply_safety_guardrails(aux_informed_predict(image_path, mode=mode, version=prompt_version, pixel_model_path=aux_model_path))
+        # vraie IA MedGemma avec le prompt baseline ou improved, sans avis auxiliaire
         else:
             pred = apply_safety_guardrails(vlm_predict_placeholder(image_path, mode=mode, version=prompt_version))
 
@@ -147,7 +146,17 @@ def main() -> None:
     # choisir une liste de cas
     parser.add_argument('--case-ids', type=int, nargs='+', default=None)
 
+    # fichier texte avec des case_id separes par des espaces ou des retours a la ligne
+    parser.add_argument('--case-ids-file', type=Path, default=None)
+
+    # chemin vers un modele de classifieur pixel entraine : si fourni, MedGemma recoit son avis en contexte
+    parser.add_argument('--aux-model-path', type=Path, default=None)
+
     args = parser.parse_args()
+
+    case_ids = args.case_ids
+    if args.case_ids_file is not None:
+        case_ids = [int(x) for x in args.case_ids_file.read_text(encoding='utf-8').split()]
 
     if args.compute_metrics:
         compute_metrics(args.db_path)
@@ -162,9 +171,10 @@ def main() -> None:
             max_cases=args.max_cases, # limite le nombre de cas (optionnel)
             prompt_version=args.prompt_version, # version du prompt (0=baseline, 1/2/3=improved)
             case_id=args.case_id, # un seul cas par son ID (optionnel)
-            case_ids=args.case_ids, # liste de cas par leurs IDs (optionnel)
+            case_ids=case_ids, # liste de cas par leurs IDs (optionnel, ou lue depuis --case-ids-file)
             sample_n=args.sample_n, # échantillon aléatoire équilibré de N images
-            sample_seed=args.sample_seed # seed pour reproduire le même échantillon
+            sample_seed=args.sample_seed, # seed pour reproduire le même échantillon
+            aux_model_path=args.aux_model_path # avis du classifieur pixel donne a MedGemma si fourni
             )
 
 if __name__ == '__main__':

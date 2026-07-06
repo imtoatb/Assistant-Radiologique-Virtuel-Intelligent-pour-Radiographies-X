@@ -38,10 +38,12 @@ def main() -> None:
 
     x = np.vstack([extract_features(ROOT / row["image_path"]) for row in rows])
     y = np.asarray([row["label"] for row in rows])
+    case_ids = np.asarray([int(row["case_id"]) for row in rows])
 
-    x_train, x_test, y_train, y_test = train_test_split(
+    x_train, x_test, y_train, y_test, ids_train, ids_test = train_test_split(
         x,
         y,
+        case_ids,
         test_size=0.25,
         random_state=42,
         stratify=y,
@@ -56,6 +58,16 @@ def main() -> None:
 
     args.model_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, args.model_path)
+
+    # trace des case_id vus a l'entrainement et jamais vus, pour eviter les fuites de donnees
+    # quand ce modele sert ensuite d'avis auxiliaire pour evaluer MedGemma sur un echantillon
+    stem = args.model_path.stem
+    (args.model_path.parent / f"{stem}_train_case_ids.txt").write_text(
+        "\n".join(str(i) for i in sorted(ids_train)), encoding="utf-8"
+    )
+    (args.model_path.parent / f"{stem}_test_case_ids.txt").write_text(
+        "\n".join(str(i) for i in sorted(ids_test)), encoding="utf-8"
+    )
 
     report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
     args.report_path.parent.mkdir(parents=True, exist_ok=True)

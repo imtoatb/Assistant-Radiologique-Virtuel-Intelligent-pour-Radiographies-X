@@ -48,7 +48,8 @@ def specificity(y_true: Iterable[str], y_pred: Iterable[str],
     """Rappel pour la classe négative (taux de vrais négatifs)."""
     y_true = list(y_true); y_pred = list(y_pred)
     tn = sum(t == negative_class and p == negative_class for t, p in zip(y_true, y_pred))
-    fp = sum(t != negative_class and p == negative_class for t, p in zip(y_true, y_pred))
+    # faux positif = vrai negatif predit comme autre chose (symetrique du fn de sensitivity)
+    fp = sum(t == negative_class and p != negative_class for t, p in zip(y_true, y_pred))
     return tn / (tn + fp) if (tn + fp) else 0.0
 
 # permet de calculer les métriques globales sur un ensemble de cas
