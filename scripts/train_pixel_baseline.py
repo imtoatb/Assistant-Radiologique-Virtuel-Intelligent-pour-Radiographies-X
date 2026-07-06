@@ -60,7 +60,7 @@ def main() -> None:
     joblib.dump(model, args.model_path)
 
     # trace des case_id vus a l'entrainement et jamais vus, pour eviter les fuites de donnees
-    # quand ce modele sert ensuite d'avis auxiliaire pour evaluer MedGemma sur un echantillon
+    # lors de l'evaluation du classifieur sur un echantillon de test propre
     stem = args.model_path.stem
     (args.model_path.parent / f"{stem}_train_case_ids.txt").write_text(
         "\n".join(str(i) for i in sorted(ids_train)), encoding="utf-8"

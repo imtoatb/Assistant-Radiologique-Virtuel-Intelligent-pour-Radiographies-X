@@ -7,7 +7,7 @@ Pour un vrai projet, utiliser un dataset autorisé comme RSNA Pneumonia, CheXper
 ## Datasets réels utilisés
 
 - `brutes_kaggle/` : dataset Kaggle `fkarimovv/abnormal-lung`, utilisé en premier car simple à importer (pas d'authentification particulière). Sert de pilote pour valider tout le pipeline. Résultats dans `database_kaggle_dataset.sqlite` / `cases_kaggle_dataset.csv`.
-- `brutes_rsa/` : dataset RSNA Pneumonia Detection Challenge, le dataset officiel demandé par le cahier des charges. Importé via `scripts/import_rsna_pneumonia.py` (nécessite un compte Kaggle authentifié). Résultats dans `database.sqlite` / `cases.csv` (les fichiers actifs par défaut).
+- `brutes_rsna/` : dataset RSNA Pneumonia Detection Challenge, le dataset officiel demandé par le cahier des charges. Importé via `scripts/import_rsna_pneumonia.py` (nécessite un compte Kaggle authentifié). Résultats dans `database.sqlite` / `cases.csv` (les fichiers actifs par défaut).
 
 Les deux jeux de données restent dans des bases séparées pour ne jamais mélanger les images ou les runs des deux datasets.
 

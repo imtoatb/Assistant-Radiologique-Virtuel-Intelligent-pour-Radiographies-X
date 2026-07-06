@@ -523,7 +523,7 @@
         <option value="pixel_baseline">Pixel Baseline</option>
         <option value="baseline">Référence (jouet)</option>
         <option value="improved">Amélioré (jouet)</option>
-        <option value="vlm">MedGemma </option>
+        <option value="vlm">MedGemma Baseline</option>
         <option value="vlm_improved">MedGemma Amélioré</option>
       </select>
     </div>
@@ -564,8 +564,8 @@
         <div class="scan-line hidden" id="scan-line"></div>
         <div class="preview-hint hidden" id="preview-hint">Appuyez sur Lancer le scanner pour analyser</div>
         <div class="img-overlay hidden" id="img-overlay">
-          <div class="overlay-icon">＋</div>
-          <span class="overlay-label">Ajouter des images</span>
+          <div class="overlay-icon" id="overlay-icon">＋</div>
+          <span class="overlay-label" id="overlay-label">Ajouter des images</span>
         </div>
       </div>
     </div>
@@ -646,6 +646,9 @@
   const scanLine      = document.getElementById('scan-line');
   const previewHint   = document.getElementById('preview-hint');
   const imgOverlay    = document.getElementById('img-overlay');
+  const overlayIcon   = document.getElementById('overlay-icon');
+  const overlayLabel  = document.getElementById('overlay-label');
+  let overlayMode     = 'add'; // 'add' (post-scan, ajoute au lot) ou 'replace' (avant scan, remplace l'image active)
   const actionBtn     = document.getElementById('action-btn');
   const tabsBar       = document.getElementById('image-tabs');
   const rightIdle     = document.getElementById('right-idle');
@@ -684,7 +687,10 @@
   });
   dzBrowse.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
   dropZone.addEventListener('click', () => fileInput.click());
-  imgOverlay.addEventListener('click', () => fileInput.click());
+  imgOverlay.addEventListener('click', () => {
+    if (overlayMode === 'replace' && activeId) removeImage(activeId); // image pas encore scannee : on la retire avant d'en choisir une autre
+    fileInput.click();
+  });
 
   fileInput.addEventListener('change', (e) => {
     loadFiles(e.target.files);
@@ -837,7 +843,11 @@
       xrayImg.src = active.dataUrl || '';
       scanLine.classList.toggle('hidden', active.status !== 'scanning');
       previewHint.classList.toggle('hidden', active.status !== 'ready');
-      imgOverlay.classList.toggle('hidden', active.status !== 'results');
+      // overlay cliquable avant scan (remplacer l'image active si mauvais choix) et apres scan (ajouter au lot) ; masque pendant le scan
+      imgOverlay.classList.toggle('hidden', active.status === 'scanning');
+      overlayMode = active.status === 'ready' ? 'replace' : 'add';
+      overlayIcon.textContent = overlayMode === 'replace' ? '⟳' : '＋';
+      overlayLabel.textContent = overlayMode === 'replace' ? 'Remplacer cette image' : 'Ajouter des images';
     }
 
     rightIdle.classList.toggle('hidden', hasImages);

@@ -23,6 +23,13 @@ from src.database import DEFAULT_DB, get_runs, insert_case, insert_prompt, inser
 
 app = FastAPI(title="Pulmonar")
 
+# le frontend n'envoie pas de prompt_version (seul "model" est poste, cf. app/static/index.html) donc
+# chaque mode doit avoir sa propre version fixe plutot que de partager un defaut de formulaire :
+# baseline_prompt_4.txt n'existe pas (seul baseline_prompt_0.txt existe) et improved_prompt_4.txt
+# n'est pas le meilleur prompt trouve (voir CLAUDE.md : v10, comparaison de symetrie, 71.7% accuracy)
+BASELINE_PROMPT_VERSION = 0
+IMPROVED_PROMPT_VERSION = 10
+
 _DIR    = Path(__file__).parent
 _STATIC = _DIR / "static"
 _DATA   = ROOT / "data"
@@ -96,7 +103,7 @@ def index():
 async def predict(
     file: UploadFile = File(...),
     model: str = Form("pixel_baseline"),
-    prompt_version: int = Form(4),
+    prompt_version: int = Form(10),
 ):
     suffix = Path(file.filename or "img.png").suffix or ".png"
     data   = await file.read()
@@ -142,9 +149,9 @@ async def predict(
         if model == "pixel_baseline":
             result = apply_safety_guardrails(pixel_baseline_predict(clean_path))
         elif model == "vlm":
-            result = apply_safety_guardrails(vlm_predict_placeholder(clean_path, mode="baseline", version=prompt_version))
+            result = apply_safety_guardrails(vlm_predict_placeholder(clean_path, mode="baseline", version=BASELINE_PROMPT_VERSION))
         elif model == "vlm_improved":
-            result = apply_safety_guardrails(vlm_predict_placeholder(clean_path, mode="improved", version=prompt_version))
+            result = apply_safety_guardrails(vlm_predict_placeholder(clean_path, mode="improved", version=IMPROVED_PROMPT_VERSION))
         else:
             result = apply_safety_guardrails(toy_predict(clean_path, mode=model))
 

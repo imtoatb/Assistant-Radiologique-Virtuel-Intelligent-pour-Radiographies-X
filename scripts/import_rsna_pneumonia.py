@@ -169,7 +169,7 @@ def import_rsna(images_dir: Path, csv_path: Path, max_cases: int | None, clean: 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--images-dir", type=Path, default=ROOT / "data" / "brutes_rsa")
+    parser.add_argument("--images-dir", type=Path, default=ROOT / "data" / "brutes_rsna")
     parser.add_argument("--csv-path", type=Path, default=ROOT / "data" / "cases.csv")
     parser.add_argument("--max-cases", type=int, default=150)
     parser.add_argument("--clean", action="store_true")

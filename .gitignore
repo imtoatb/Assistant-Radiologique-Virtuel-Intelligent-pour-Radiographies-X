@@ -10,6 +10,7 @@ database.sqlite
 *.sqlite.bak
 data/database_kaggle_dataset.sqlite
 data/brutes_rsa/
+data/logs/*.log
 eval/outputs/
 .env
 .DS_Store
